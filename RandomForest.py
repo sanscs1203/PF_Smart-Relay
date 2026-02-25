@@ -17,6 +17,8 @@ from sklearn.metrics import (
     roc_curve,
     make_scorer
 )
+from matplotlib.patches import Patch
+
 
 # Load DataSet
 file = 'DataSet_Nodes_5.csv'
@@ -121,8 +123,8 @@ else:
 X_train, X_test, y_train, y_test = train_test_split(
     X, y,
     test_size=0.2,
-    random_state=42,       # Reproducibilidad
-    stratify=y             # Mantener proporción de clases
+    random_state=242,       
+    stratify=y             
 )
 
 # Check dimensions
@@ -141,131 +143,7 @@ print(f"Train:             Falla={y_train.mean():.2%}  |  No Falla={1-y_train.me
 print(f"Test:              Falla={y_test.mean():.2%}  |  No Falla={1-y_test.mean():.2%}")
 
 
-# BASELINE
-# Create model with defaul hyperparameters
-rf_baseline = RandomForestClassifier(
-    n_estimators=100,
-    max_depth=None,
-    min_samples_split=2,
-    min_samples_leaf=1,
-    max_features='sqrt',
-    class_weight='balanced',   
-    random_state=42,
-    n_jobs=-1                  
-)
-
-# Train the model
-print("=" * 50)
-print("ENTRENAMIENTO - RANDOM FOREST BASELINE")
-print("=" * 50)
-
-start = time.time()
-rf_baseline.fit(X_train, y_train)
-train_time = time.time() - start
-
-print(f"Modelo entrenado exitosamente")
-print(f"Tiempo de entrenamiento: {train_time:.3f} segundos")
-
-# Prediction and time of inference
-start = time.time()
-y_pred = rf_baseline.predict(X_test)
-total_inference_time = time.time() - start
-
-time_per_sample = (total_inference_time / X_test.shape[0]) * 1000  # In miliseconds
-
-print(f"\nTiempo de inferencia total: {total_inference_time:.4f} segundos")
-print(f"Tiempo por muestra: {time_per_sample:.4f} milisegundos")
-
-# Get probabilities
-y_proba = rf_baseline.predict_proba(X_test)[:, 1]  # Probabilities of class 1 _ Fail
-
-# General view of the results
-print("\n" + "=" * 50)
-print("VISTA RÁPIDA")
-print("=" * 50)
-print(f"Predicciones positivas (Falla): {(y_pred == 1).sum()}")
-print(f"Predicciones negativas (No Falla): {(y_pred == 0).sum()}")
-print(f"valuees reales positivos (Falla): {(y_test == 1).sum()}")
-print(f"valuees reales negativos (No Falla): {(y_test == 0).sum()}")
-
-# Individual measures
-recall = recall_score(y_test, y_pred)
-precision = precision_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred)
-f2 = fbeta_score(y_test, y_pred, beta=2)
-roc_auc = roc_auc_score(y_test, y_proba)
-accuracy = accuracy_score(y_test, y_pred)
-
-# Specificity
-tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
-specificity = tn / (tn + fp)
-
-print("=" * 50)
-print("MÉTRICAS - RANDOM FOREST BASELINE")
-print("=" * 50)
-
-# Critical measures
-print("\n🔴 MÉTRICAS CRÍTICAS:")
-print(f"  Recall:       {recall:.4f}")
-print(f"  F2-Score:     {f2:.4f}")
-print(f"  ROC-AUC:      {roc_auc:.4f}")
-print(f"  Tiempo/muestra: {time_per_sample:.4f} ms")
-
-# Complementary measures
-print("\n🟡 MÉTRICAS COMPLEMENTARIAS:")
-print(f"  Precision:    {precision:.4f}")
-print(f"  Specificity:  {specificity:.4f}")
-print(f"  F1-Score:     {f1:.4f}")
-print(f"  Accuracy:     {accuracy:.4f}")
-
-# Confusion matrix
-print("\n" + "=" * 50)
-print("MATRIZ DE CONFUSIÓN")
-print("=" * 50)
-print(f"""
-                  Predicho
-                  No Falla    Falla
-Real No Falla      {tn}          {fp}
-Real Falla         {fn}          {tp}
-""")
-print(f"  Verdaderos Negativos (TN): {tn} → No Falla correctamente detectada")
-print(f"  Falsos Positivos (FP):     {fp} → Disparo innecesario")
-print(f"  Falsos Negativos (FN):     {fn} → ⚠️ FALLA NO DETECTADA (crítico)")
-print(f"  Verdaderos Positivos (TP): {tp} → Falla correctamente detectada")
-
-# Clasiffication report
-print("\n" + "=" * 50)
-print("REPORTE DE CLASIFICACIÓN")
-print("=" * 50)
-print(classification_report(
-    y_test, y_pred,
-    target_names=['No Falla', 'Falla']
-))
-
-# Weighted score
-# Normalize inference time (inverted, lower is better)
-# Use 1/(1+t) so that it is between 0 and 1
-tiempo_norm = 1 / (1 + time_per_sample)
-
-score_balanced = (
-    0.30 * recall +
-    0.20 * f2 +
-    0.20 * roc_auc +
-    0.20 * specificity +
-    0.10 * tiempo_norm
-)
-
-print("=" * 50)
-print("SCORE PONDERADO")
-print("=" * 50)
-print(f"  Recall (0.30):       {0.30 * recall:.4f}")
-print(f"  F2-Score (0.20):     {0.20 * f2:.4f}")
-print(f"  ROC-AUC (0.20):     {0.20 * roc_auc:.4f}")
-print(f"  Specificity (0.20): {0.20 * specificity:.4f}")
-print(f"  Tiempo (0.10):      {0.10 * tiempo_norm:.4f}")
-print(f"\n  📊 SCORE TOTAL:      {score_balanced:.4f}")
-
-# OPTIMIZED
+# GridSearchCV with RandomForestClassifier and custom scorer
 def score_balanced_func(y_true, y_proba):
     """
     Weighted score WITHOUT time component.
@@ -316,12 +194,12 @@ print(f"Total combinaciones: {total_combinations}")
 print(f"Total entrenamientos (x5 folds): {total_combinations * 5}")
 
 # Configure and executeGridSearchCV
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=242)
 
 grid_search = GridSearchCV(
     estimator=RandomForestClassifier(
         class_weight='balanced',
-        random_state=42,
+        random_state=242,
         n_jobs=1              
     ),
     param_grid=param_grid,
@@ -340,26 +218,6 @@ time_grid = time.time() - start
 
 print(f"\n✅ Búsqueda completada en {time_grid:.1f} segundos")
 
-# Shown progress of the score
-print("\n" + "=" * 50)
-print("PROGRESO: MEJORAS DEL SCORE")
-print("=" * 50)
-
-results = pd.DataFrame(grid_search.cv_results_)
-results = results.sort_values('rank_test_score', ascending=True)
-
-best_so_far = -1
-mejora_num = 0
-
-for _, row in results.iterrows():
-    score = row['mean_test_score']
-    if score > best_so_far:
-        mejora_num += 1
-        best_so_far = score
-        params = row['params']
-        print(f"\n  Mejora #{mejora_num} | Score: {score:.4f} ± {row['std_test_score']:.4f}")
-        for param, value in params.items():
-            print(f"    {param}: {value}")
 
 # Top 5 - Hyperparameters found
 print("\n" + "=" * 50)
@@ -379,7 +237,7 @@ for i, (_, row) in enumerate(top5.iterrows()):
     model_temp = RandomForestClassifier(
         **params,
         class_weight='balanced',
-        random_state=42,
+        random_state=242,
         n_jobs=-1
     )
     model_temp.fit(X_train, y_train)
@@ -400,7 +258,7 @@ for i, (_, row) in enumerate(top5.iterrows()):
     
     # Inference time 
     tiempos = []
-    for _ in range(10):
+    for _ in range(100):
         t_start = time.time()
         model_temp.predict(X_test)
         t_end = time.time()
@@ -445,3 +303,181 @@ for param, value in best_params_final.items():
     print(f"  {param}: {value}")
 
 rf_optimizado = best_model_final
+
+# Preediction and time of inference
+start = time.time()
+y_pred = rf_optimizado.predict(X_test)
+total_inference_time = time.time() - start
+
+time_per_sample = total_inference_time / X_test.shape[0] * 1000
+
+print("\n" + "=" * 50)
+print("ENTRENAMIENTO - RANDOM FOREST OPTIMIZADO")
+print("=" * 50)
+print(f"Modelo seleccionado tras GridSearchCV")
+print(f"Hiperparámetros: {best_params_final}")
+
+print(f"\nTiempo de inferencia total: {total_inference_time:.4f} segundos")
+print(f"Tiempo por muestra: {time_per_sample:.4f} milisegundos")
+
+# Get probabilities
+y_proba = rf_optimizado.predict_proba(X_test)[:, 1]
+
+# General view of the results
+print("\n" + "=" * 50)
+print("VISTA RÁPIDA")
+print("=" * 50)
+print(f"Predicciones positivas (Falla): {(y_pred == 1).sum()}")
+print(f"Predicciones negativas (No Falla): {(y_pred == 0).sum()}")
+print(f"Valores reales positivos (Falla): {(y_test == 1).sum()}")
+print(f"Valores reales negativos (No Falla): {(y_test == 0).sum()}")
+
+# Individual measures
+recall = recall_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+f2 = fbeta_score(y_test, y_pred, beta=2)
+roc_auc = roc_auc_score(y_test, y_proba)
+accuracy = accuracy_score(y_test, y_pred)
+
+# Specificity
+tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+specificity = tn / (tn + fp)
+
+print("\n" + "=" * 50)
+print("MÉTRICAS - RANDOM FOREST OPTIMIZADO")
+print("=" * 50)
+
+# Critical measures
+print("\n🔴 MÉTRICAS CRÍTICAS:")
+print(f"  Recall:          {recall:.4f}")
+print(f"  F2-Score:        {f2:.4f}")
+print(f"  ROC-AUC:         {roc_auc:.4f}")
+print(f"  Tiempo/muestra:  {time_per_sample:.4f} ms")
+
+# Complementary measures
+print("\n🟡 MÉTRICAS COMPLEMENTARIAS:")
+print(f"  Precision:       {precision:.4f}")
+print(f"  Specificity:     {specificity:.4f}")
+print(f"  F1-Score:        {f1:.4f}")
+print(f"  Accuracy:        {accuracy:.4f}")
+
+# Confusion matrix
+print("\n" + "=" * 50)
+print("MATRIZ DE CONFUSIÓN")
+print("=" * 50)
+print(f"""
+                  Predicho
+                  No Falla    Falla
+Real No Falla      {tn}          {fp}
+Real Falla         {fn}          {tp}
+""")
+print(f"  Verdaderos Negativos (TN): {tn} → No Falla correctamente detectada")
+print(f"  Falsos Positivos (FP):     {fp} → Disparo innecesario")
+print(f"  Falsos Negativos (FN):     {fn} → ⚠️ FALLA NO DETECTADA (crítico)")
+print(f"  Verdaderos Positivos (TP): {tp} → Falla correctamente detectada")
+
+# Classification report
+print("\n" + "=" * 50)
+print("REPORTE DE CLASIFICACIÓN")
+print("=" * 50)
+print(classification_report(
+    y_test, y_pred,
+    target_names=['No Falla', 'Falla']
+))
+
+# Weighted score
+tiempo_norm = 1 / (1 + time_per_sample)
+
+score_balanced = (
+    0.30 * recall +
+    0.20 * f2 +
+    0.20 * roc_auc +
+    0.20 * specificity +
+    0.10 * tiempo_norm
+)
+
+print("=" * 50)
+print("SCORE PONDERADO")
+print("=" * 50)
+print(f"  Recall (0.30):       {0.30 * recall:.4f}")
+print(f"  F2-Score (0.20):     {0.20 * f2:.4f}")
+print(f"  ROC-AUC (0.20):     {0.20 * roc_auc:.4f}")
+print(f"  Specificity (0.20): {0.20 * specificity:.4f}")
+print(f"  Tiempo (0.10):      {0.10 * tiempo_norm:.4f}")
+print(f"\n  📊 SCORE TOTAL:      {score_balanced:.4f}")
+
+
+# Feature importance
+print("=" * 50)
+print("IMPORTANCIA DE FEATURES")
+print("=" * 50)
+
+# Obtain the importance of the optimaed model
+importances = rf_optimizado.feature_importances_
+feature_names = X.columns.tolist()
+
+# Create a DataFrame for better visualization
+df_importance = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': importances
+}).sort_values('Importance', ascending=False)
+
+# Show the importance
+print("\n  Ranking de Features:")
+print(f"  {'#':<4} {'Feature':<12} {'Importancia':>12} {'Acumulado':>10}")
+print(f"  {'-'*40}")
+
+acumulated = 0
+for i, (_, row) in enumerate(df_importance.iterrows()):
+    acumulated += row['Importance']
+    print(f"  {i+1:<4} {row['Feature']:<12} {row['Importance']:>12.4f} {acumulated:>10.4f}")
+    
+# Split the importance into groups
+imp_voltajes = df_importance[df_importance['Feature'].isin(['Va', 'Vb', 'Vc'])]['Importance'].sum()
+imp_corrientes = df_importance[df_importance['Feature'].isin(['Ia', 'Ib', 'Ic'])]['Importance'].sum()
+
+print(f"\n  Aporte por grupo:")
+print(f"  Voltajes (Va, Vb, Vc):     {imp_voltajes:.4f} ({imp_voltajes*100:.1f}%)")
+print(f"  Corrientes (Ia, Ib, Ic):   {imp_corrientes:.4f} ({imp_corrientes*100:.1f}%)")
+
+# Diagnosis of the importance
+print(f"\n  Diagnóstico:")
+if imp_voltajes < 0.10:
+    print(f"  ⚠️ Voltajes aportan menos del 10% → Considerar eliminarlos")
+elif imp_voltajes < 0.20:
+    print(f"  🟡 Voltajes aportan poco ({imp_voltajes*100:.1f}%) → Monitorear")
+else:
+    print(f"  ✅ Voltajes aportan significativamente ({imp_voltajes*100:.1f}%)")
+    
+# Bar diagrams
+plt.figure(figsize=(10, 5))
+colors = ['#e74c3c' if f in ['Ia', 'Ib', 'Ic'] else '#3498db' 
+          for f in df_importance['Feature']]
+
+bars = plt.barh(
+    df_importance['Feature'][::-1],  
+    df_importance['Importance'][::-1],
+    color=colors[::-1],
+    edgecolor='white',
+    linewidth=0.5
+)
+
+plt.xlabel('Importancia', fontsize=12)
+plt.title('Feature Importance - Random Forest Detección', fontsize=14)
+
+# legend
+legend_elements = [
+    Patch(facecolor='#e74c3c', label='Corrientes'),
+    Patch(facecolor='#3498db', label='Voltajes')
+]
+plt.legend(handles=legend_elements, loc='lower right', fontsize=11)
+
+# Values of the bars
+for bar, val in zip(bars, df_importance['Importance'][::-1]):
+    plt.text(bar.get_width() + 0.005, bar.get_y() + bar.get_height()/2,
+             f'{val:.4f}', va='center', fontsize=10)
+
+plt.tight_layout()
+plt.savefig('feature_importance_deteccion.png', dpi=150, bbox_inches='tight')
+plt.show()

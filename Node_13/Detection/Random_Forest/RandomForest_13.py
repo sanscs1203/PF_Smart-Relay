@@ -49,7 +49,7 @@ print("PHASE 1: DATA LOADING AND EXPLORATION")
 print("=" * 70)
 
 # Load dataset
-file = '~/CODES/PF_Smart-Relay/Node_5/DataSet_Nodes_5.csv'
+file = '~/CODES/PF_Smart-Relay/Node_13/DataSet_Nodes_13.csv'
 df = pd.read_csv(file, sep=';', decimal=',')
 
 # Fix: convert RF and Factor_Carga to float (handle comma decimals)
@@ -514,7 +514,7 @@ print("\n" + "=" * 60)
 print("PHASE 5: THRESHOLD OPTIMIZATION")
 print("=" * 60)
 
-# Perform threshold sweep (needed for visualization and optimization) ---
+# --- Perform threshold sweep ---
 thresholds = np.arange(0.05, 0.96, 0.01)
 sweep_results = []
 
@@ -531,11 +531,7 @@ for t in thresholds:
     except ValueError:
         auc_t = 0.0
     
-    ahp_score_t = (
-        W_RECALL      * rec_t  +
-        W_SPECIFICITY * spec_t +
-        W_AUC         * auc_t
-    )
+    ahp_score_t = W_RECALL * rec_t + W_SPECIFICITY * spec_t + W_AUC * auc_t
     
     sweep_results.append({
         'Threshold':   t,
@@ -549,96 +545,122 @@ for t in thresholds:
 
 df_sweep = pd.DataFrame(sweep_results)
 
-# Check if deafult threshold already achieves perfect recall
-y_pred_default = (y_proba >= 0.5).astype(int)
-tn_def, fp_def, fn_def, tp_def = confusion_matrix(y_test, y_pred_default).ravel()
-recall_default = recall_score(y_test, y_pred_default)
+# --- Evaluate default threshold ---
+default_row = df_sweep[df_sweep['Threshold'].round(2) == 0.50].iloc[0]
+recall_default = default_row['Recall']
+fn_default = int(default_row['FN'])
+fp_default = int(default_row['FP'])
 
-# Find optimal threshold
+print(f"\n  Default threshold (0.50) performance:")
+print(f"    Recall: {recall_default:.4f}")
+print(f"    FN: {fn_default}, FP: {fp_default}")
+
+# --- Find optimal threshold ---
+# Priority 1: Recall = 1.0 (mandatory for protection)
+# Priority 2: Maximum AHP Score (balances all metrics)
+# Priority 3: Minimum FP (security)
+# Priority 4: Closest to 0.50 (best generalization)
+
 perfect_recall = df_sweep[df_sweep['Recall'] == 1.0]
 
 if len(perfect_recall) > 0:
+    print(f"\n  ✅ Found {len(perfect_recall)} thresholds with Recall = 1.0")
+    print(f"     Range: [{perfect_recall['Threshold'].min():.2f}, {perfect_recall['Threshold'].max():.2f}]")
     
-    #  Among Recall=1.0, find highest AHP_Score
+    # Step 1: Filter by maximum AHP Score
     max_ahp = perfect_recall['AHP_Score'].max()
-    best_ahp_candidates = perfect_recall[perfect_recall['AHP_Score'] == max_ahp]
+    candidates = perfect_recall[perfect_recall['AHP_Score'] == max_ahp].copy()
+    print(f"\n  Step 1 - Max AHP ({max_ahp:.4f}): {len(candidates)} candidates")
     
-    # Find fewest FP (highest Specificity)
-    min_fp = best_ahp_candidates['FP'].min()
-    best_fp_candidates = best_ahp_candidates[best_ahp_candidates['FP'] == min_fp]
+    # Step 2: Filter by minimum FP
+    min_fp = candidates['FP'].min()
+    candidates = candidates[candidates['FP'] == min_fp].copy()
+    print(f"  Step 2 - Min FP ({int(min_fp)}): {len(candidates)} candidates")
     
-    # Pick LOWEST threshold (best generalization margin)
-    best_row = best_fp_candidates.loc[best_fp_candidates['Threshold'].idxmin()]
+    # Step 3: Pick threshold CLOSEST TO 0.50 (best generalization margin)
+    candidates['distance_to_default'] = (candidates['Threshold'] - 0.50).abs()
+    best_row = candidates.loc[candidates['distance_to_default'].idxmin()]
     optimal_threshold = best_row['Threshold']
+    print(f"  Step 3 - Closest to 0.50: {optimal_threshold:.2f}")
     
-    if optimal_threshold == 0.5:
-        print("\n  ✅ Default threshold (0.50) already achieves perfect recall (no false negatives)")
-        print("  No threshold optimization needed for dependability")
-        print("  Using default threshold for final model")
+    # Show the valid range
+    valid_range = candidates['Threshold'].values
+    print(f"\n  Valid threshold range: {valid_range.min():.2f} - {valid_range.max():.2f}")
+    print(f"  Selected: {optimal_threshold:.2f} (closest to natural boundary 0.50)")
+    
+    # Report if default was selected
+    if optimal_threshold == 0.50:
+        print(f"\n  📌 Default threshold (0.50) IS optimal!")
+        print(f"     - Achieves Recall = 1.0 ✅")
+        print(f"     - Has maximum AHP Score ✅")
+        print(f"     - Has minimum FP ✅")
+    elif abs(optimal_threshold - 0.50) < 0.1:
+        print(f"\n  📌 Optimal threshold ({optimal_threshold:.2f}) is close to default")
+        print(f"     - Minor adjustment for improved performance")
     else:
-        print(f"\n  ⚠️ Default threshold (0.50) has Recall = {recall_default:.4f} with {fn_def} false negatives")
-        print(f"  Optimal threshold for perfect recall: {optimal_threshold:.2f}")
+        print(f"\n  ⚠️ Optimal threshold ({optimal_threshold:.2f}) differs significantly from default")
+        print(f"     - Default (0.50) had FN={fn_default}, adjusting threshold helps")
 
 else:
+    print(f"\n  ⚠️ No threshold achieves Recall = 1.0")
+    print(f"     This indicates some faults are inherently hard to detect")
     
-    print(f"\n ⚠️ No threshold achieves Recall = 1.0")
-    
-    # Analyze FN at default threshold
+    # Analyze FN at default
     fn_mask = (y_test == 1) & (y_proba < 0.5)
     fn_indices = np.where(fn_mask)[0]
     
     if fn_mask.sum() > 0:
-        print(f"\n  FN Analysis at default threshold (0.50):")
+        print(f"\n  FN Analysis at default threshold:")
         for i, idx in enumerate(fn_indices[:5]):
             print(f"    FN #{i+1}: P(Fault) = {y_proba[idx]:.4f}")
-            
-    # Pick threshold with highest Recall, then highest AHP as tie-breaker
-    recall_max = df_sweep['Recall'].max()
-
-    best_recall_candidates = df_sweep[df_sweep['Recall'] == recall_max]
-
-    ahp_max = best_recall_candidates['AHP_Score'].max()
-
-    best_ahp_candidates = best_recall_candidates[best_recall_candidates['AHP_Score'] == ahp_max]
-
-    # Pick the lowest threshold among candidates with max Recall and max AHP
-    best_row = best_ahp_candidates.loc[best_ahp_candidates['Threshold'].idxmin()]
-
+            # Could add feature analysis here
+    
+    # Strategy: Maximize Recall, then AHP, then closest to 0.50
+    max_recall = df_sweep['Recall'].max()
+    candidates = df_sweep[df_sweep['Recall'] == max_recall].copy()
+    
+    max_ahp = candidates['AHP_Score'].max()
+    candidates = candidates[candidates['AHP_Score'] == max_ahp].copy()
+    
+    candidates['distance_to_default'] = (candidates['Threshold'] - 0.50).abs()
+    best_row = candidates.loc[candidates['distance_to_default'].idxmin()]
     optimal_threshold = best_row['Threshold']
-
-    print(f"\n  Best achievable Recall: {recall_max:.4f}")
+    
+    print(f"\n  Best achievable Recall: {max_recall:.4f}")
     print(f"  Selected threshold: {optimal_threshold:.2f}")
+    print(f"  Remaining FN: {int(best_row['FN'])} (unavoidable with current features)")
 
-
-# Apply optimized threshold
+# --- Apply optimal threshold ---
 y_pred_optimal = (y_proba >= optimal_threshold).astype(int)
 tn_opt, fp_opt, fn_opt, tp_opt = confusion_matrix(y_test, y_pred_optimal).ravel()
 
 recall_opt    = recall_score(y_test, y_pred_optimal)
-precision_opt = precision_score(y_test, y_pred_optimal)
+precision_opt = precision_score(y_test, y_pred_optimal, zero_division=0)
 roc_auc_opt   = roc_auc_score(y_test, y_proba)
 accuracy_opt  = accuracy_score(y_test, y_pred_optimal)
 spec_opt      = tn_opt / (tn_opt + fp_opt) if (tn_opt + fp_opt) > 0 else 0.0
 
-score_ahp_opt = (
-    W_RECALL      * recall_opt  +
-    W_SPECIFICITY * spec_opt    +
-    W_AUC         * roc_auc_opt
-)
+score_ahp_opt = W_RECALL * recall_opt + W_SPECIFICITY * spec_opt + W_AUC * roc_auc_opt
 
+# --- Print results ---
 print(f"\n" + "=" * 60)
-print(f"RESULTS AT OPTIMIZED THRESHOLD ({optimal_threshold:.2f})")
+print(f"RESULTS AT OPTIMAL THRESHOLD ({optimal_threshold:.2f})")
 print("=" * 60)
 
-print(f"\n🔴 AHP SCORE METRICS:")
-print(f"  Recall:       {recall_opt:.4f}")
-print(f"  Specificity:  {spec_opt:.4f}")
-print(f"  ROC-AUC:      {roc_auc_opt:.4f}")
-print(f"  AHP Score:    {score_ahp_opt:.4f}")
+print(f"\n  {'Metric':<20} {'Default (0.50)':>15} {'Optimal ({:.2f})':>15}".format(optimal_threshold))
+print(f"  {'-'*52}")
+print(f"  {'Recall':<20} {recall_default:>15.4f} {recall_opt:>15.4f}")
+print(f"  {'Specificity':<20} {default_row['Specificity']:>15.4f} {spec_opt:>15.4f}")
+print(f"  {'AHP Score':<20} {default_row['AHP_Score']:>15.4f} {score_ahp_opt:>15.4f}")
+print(f"  {'FN':<20} {fn_default:>15d} {fn_opt:>15d}")
+print(f"  {'FP':<20} {fp_default:>15d} {fp_opt:>15d}")
 
-print(f"\n  Confusion Matrix:")
+print(f"\n  Confusion Matrix (threshold = {optimal_threshold:.2f}):")
 print(f"    TN={tn_opt}  FP={fp_opt}")
 print(f"    FN={fn_opt}  TP={tp_opt}")
+
+# Flag for later use
+THRESHOLD_CHANGED = (optimal_threshold != 0.50)
 
 # =============================================================================
 # PHASE 6: STRATIFIED 5-FOLD CROSS-VALIDATION
@@ -651,10 +673,23 @@ print("=" * 60)
 OPTIMAL_THRESHOLD = optimal_threshold
 BEST_PARAMS = best_params_final
 
-THRESHOLDS = {
-    'Default (0.50)': 0.50,
-    f'Optimized ({OPTIMAL_THRESHOLD:.2f})': OPTIMAL_THRESHOLD
-}
+# Check if optimization actually changed the threshold
+THRESHOLD_CHANGED = (abs(OPTIMAL_THRESHOLD - 0.50) > 0.001)
+
+if THRESHOLD_CHANGED:
+    THRESHOLDS = {
+        'Default (0.50)': 0.50,
+        f'Optimized ({OPTIMAL_THRESHOLD:.2f})': OPTIMAL_THRESHOLD
+    }
+    print(f"\n  Evaluating TWO thresholds:")
+    print(f"    • Default: 0.50")
+    print(f"    • Optimized: {OPTIMAL_THRESHOLD:.2f}")
+else:
+    THRESHOLDS = {
+        'Default (0.50)': 0.50
+    }
+    print(f"\n  Optimal threshold = Default (0.50)")
+    print(f"  Evaluating single threshold only (no comparison needed)")
 
 print(f"\n  Model: Random Forest")
 print(f"  Hyperparameters: {BEST_PARAMS}")
@@ -728,96 +763,110 @@ for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y), 1):
                   f"AHP={ahp_f:.4f} | FN={fn_f}")
 
 # --- Summary ---
+print(f"\n" + "=" * 60)
+print("CROSS-VALIDATION SUMMARY")
+print("=" * 60)
+
 for t_name, t_results in cv_results.items():
     df_cv = pd.DataFrame(t_results)
     
-    print(f"\n  {'='*55}")
-    print(f"  SUMMARY: {t_name}")
-    print(f"  {'='*55}")
-    
-    print(f"\n  {'Metric':<15} {'Mean':>10} {'± Std':>10}")
-    print(f"  {'-'*37}")
+    print(f"\n  {t_name}:")
+    print(f"  {'─'*45}")
+    print(f"  {'Metric':<15} {'Mean':>10} {'± Std':>10}")
+    print(f"  {'─'*45}")
     
     for metric in ['Recall', 'Specificity', 'ROC_AUC', 'AHP_Score']:
         mean_val = df_cv[metric].mean()
         std_val  = df_cv[metric].std()
         print(f"  {metric:<15} {mean_val:>10.4f} {std_val:>10.4f}")
     
-    total_fn = df_cv['FN'].sum()
-    total_fp = df_cv['FP'].sum()
-    print(f"\n  Total FN across folds: {int(total_fn)}")
-    print(f"  Total FP across folds: {int(total_fp)}")
+    total_fn = int(df_cv['FN'].sum())
+    total_fp = int(df_cv['FP'].sum())
+    print(f"\n  Total FN: {total_fn} | Total FP: {total_fp}")
 
-# Store CV results for later
-df_cv_opt = pd.DataFrame(cv_results[f'Optimized ({OPTIMAL_THRESHOLD:.2f})'])
+# Store CV results
 df_cv_def = pd.DataFrame(cv_results['Default (0.50)'])
 
+if THRESHOLD_CHANGED:
+    df_cv_opt = pd.DataFrame(cv_results[f'Optimized ({OPTIMAL_THRESHOLD:.2f})'])
+else:
+    df_cv_opt = df_cv_def.copy()  # Same as default
+    
+    
 # =============================================================================
-# PHASE 6.5: VALIDATE THRESHOLD CHOICE USING CV RESULTS
+# PHASE 6.5: THRESHOLD VALIDATION (CV-Based Decision)
 # =============================================================================
 
 print("\n" + "=" * 60)
 print("THRESHOLD VALIDATION (CV-Based Decision)")
 print("=" * 60)
 
-# Get CV metrics for both thresholds
-df_cv_def = pd.DataFrame(cv_results['Default (0.50)'])
-df_cv_opt = pd.DataFrame(cv_results[f'Optimized ({OPTIMAL_THRESHOLD:.2f})'])
-
-# CV totals
-cv_default_fn = int(df_cv_def['FN'].sum())
-cv_default_fp = int(df_cv_def['FP'].sum())
-cv_default_recall = df_cv_def['Recall'].mean()
-
-cv_opt_fn = int(df_cv_opt['FN'].sum())
-cv_opt_fp = int(df_cv_opt['FP'].sum())
-cv_opt_recall = df_cv_opt['Recall'].mean()
-
-print(f"\n  CV Performance Comparison:")
-print(f"  {'Metric':<20} {'Default (0.50)':>15} {'Optimized ({:.2f})':>15}".format(OPTIMAL_THRESHOLD))
-print(f"  {'-'*52}")
-print(f"  {'Recall (mean)':<20} {cv_default_recall:>15.4f} {cv_opt_recall:>15.4f}")
-print(f"  {'Total FN':<20} {cv_default_fn:>15d} {cv_opt_fn:>15d}")
-print(f"  {'Total FP':<20} {cv_default_fp:>15d} {cv_opt_fp:>15d}")
-
-# Decision logic: Optimized is better if:
-# 1. Has equal or better Recall (equal or fewer FN)
-# 2. AND has equal or fewer FP
-# Otherwise, revert to default
-
-optimized_is_better = (
-    cv_opt_fn <= cv_default_fn and  # Equal or fewer missed faults
-    cv_opt_fp <= cv_default_fp      # Equal or fewer false alarms
-)
-
-# Also check if they're actually different
-thresholds_are_same = (OPTIMAL_THRESHOLD == 0.50)
-
-if thresholds_are_same:
-    print(f"\n  📌 Optimal threshold = Default (0.50)")
-    print(f"     No change needed.")
+if not THRESHOLD_CHANGED:
+    # No optimization happened, threshold stays at 0.50
+    print(f"\n  ✅ Optimal threshold = Default (0.50)")
+    print(f"     No validation needed.")
     FINAL_THRESHOLD = 0.50
-    
-elif optimized_is_better:
-    print(f"\n  ✅ Optimized threshold ({OPTIMAL_THRESHOLD:.2f}) CONFIRMED by CV!")
-    print(f"     - FN: {cv_default_fn} → {cv_opt_fn} ({'improved' if cv_opt_fn < cv_default_fn else 'same'})")
-    print(f"     - FP: {cv_default_fp} → {cv_opt_fp} ({'improved' if cv_opt_fp < cv_default_fp else 'same'})")
-    FINAL_THRESHOLD = OPTIMAL_THRESHOLD
     
 else:
-    print(f"\n  ⚠️ Optimized threshold ({OPTIMAL_THRESHOLD:.2f}) REJECTED by CV!")
-    print(f"     CV shows worse generalization:")
+    # Compare CV performance
+    cv_def_fn = int(df_cv_def['FN'].sum())
+    cv_def_fp = int(df_cv_def['FP'].sum())
+    cv_def_recall = df_cv_def['Recall'].mean()
+    cv_def_ahp = df_cv_def['AHP_Score'].mean()
     
-    if cv_opt_fn > cv_default_fn:
-        print(f"     - FN increased: {cv_default_fn} → {cv_opt_fn} ❌")
-    if cv_opt_fp > cv_default_fp:
-        print(f"     - FP increased: {cv_default_fp} → {cv_opt_fp} ❌")
+    cv_opt_fn = int(df_cv_opt['FN'].sum())
+    cv_opt_fp = int(df_cv_opt['FP'].sum())
+    cv_opt_recall = df_cv_opt['Recall'].mean()
+    cv_opt_ahp = df_cv_opt['AHP_Score'].mean()
     
-    print(f"\n  🔄 REVERTING to default threshold (0.50)")
-    FINAL_THRESHOLD = 0.50
+    print(f"\n  CV Performance Comparison:")
+    print(f"  {'Metric':<20} {'Default (0.50)':>15} {'Optimized ({:.2f})':>15}".format(OPTIMAL_THRESHOLD))
+    print(f"  {'-'*52}")
+    print(f"  {'Recall (mean)':<20} {cv_def_recall:>15.4f} {cv_opt_recall:>15.4f}")
+    print(f"  {'AHP Score (mean)':<20} {cv_def_ahp:>15.4f} {cv_opt_ahp:>15.4f}")
+    print(f"  {'Total FN':<20} {cv_def_fn:>15d} {cv_opt_fn:>15d}")
+    print(f"  {'Total FP':<20} {cv_def_fp:>15d} {cv_opt_fp:>15d}")
     
-    # Update optimal metrics to use default threshold
-    optimal_threshold = FINAL_THRESHOLD
+    # Decision: Optimized is BETTER if:
+    # 1. Has equal or fewer FN (Dependability maintained)
+    # 2. AND has equal or fewer FP (Security maintained or improved)
+    
+    optimized_is_better = (cv_opt_fn <= cv_def_fn) and (cv_opt_fp <= cv_def_fp)
+    optimized_is_same = (cv_opt_fn == cv_def_fn) and (cv_opt_fp == cv_def_fp)
+    
+    if optimized_is_same:
+        # Both perform equally - prefer 0.50 for simplicity
+        print(f"\n  📌 Both thresholds perform IDENTICALLY in CV")
+        print(f"     Keeping default (0.50) for simplicity and interpretability")
+        FINAL_THRESHOLD = 0.50
+        
+    elif optimized_is_better:
+        print(f"\n  ✅ Optimized threshold ({OPTIMAL_THRESHOLD:.2f}) CONFIRMED by CV!")
+        
+        if cv_opt_fn < cv_def_fn:
+            print(f"     • FN improved: {cv_def_fn} → {cv_opt_fn} ✅")
+        if cv_opt_fp < cv_def_fp:
+            print(f"     • FP improved: {cv_def_fp} → {cv_opt_fp} ✅")
+            
+        FINAL_THRESHOLD = OPTIMAL_THRESHOLD
+        
+    else:
+        print(f"\n  ⚠️ Optimized threshold ({OPTIMAL_THRESHOLD:.2f}) REJECTED by CV!")
+        print(f"     CV shows worse generalization:")
+        
+        if cv_opt_fn > cv_def_fn:
+            print(f"     • FN increased: {cv_def_fn} → {cv_opt_fn} ❌ (Dependability degraded)")
+        if cv_opt_fp > cv_def_fp:
+            print(f"     • FP increased: {cv_def_fp} → {cv_opt_fp} ❌ (Security degraded)")
+        
+        print(f"\n  🔄 REVERTING to default threshold (0.50)")
+        FINAL_THRESHOLD = 0.50
+
+# Update optimal_threshold with final decision
+optimal_threshold = FINAL_THRESHOLD
+
+# Update metrics if threshold changed
+if FINAL_THRESHOLD != OPTIMAL_THRESHOLD:
     y_pred_optimal = (y_proba >= optimal_threshold).astype(int)
     tn_opt, fp_opt, fn_opt, tp_opt = confusion_matrix(y_test, y_pred_optimal).ravel()
     
@@ -827,31 +876,14 @@ else:
     accuracy_opt  = accuracy_score(y_test, y_pred_optimal)
     spec_opt      = tn_opt / (tn_opt + fp_opt) if (tn_opt + fp_opt) > 0 else 0.0
     
-    score_ahp_opt = (
-        W_RECALL      * recall_opt  +
-        W_SPECIFICITY * spec_opt    +
-        W_AUC         * roc_auc_opt
-    )
+    score_ahp_opt = W_RECALL * recall_opt + W_SPECIFICITY * spec_opt + W_AUC * roc_auc_opt
     
-    # Update CV dataframes to use default as "optimal"
+    # Use default CV results as "optimized" since they're the same
     df_cv_opt = df_cv_def.copy()
 
 print(f"\n  {'='*52}")
-print(f"  FINAL THRESHOLD: {FINAL_THRESHOLD:.2f}")
+print(f"  FINAL THRESHOLD: {optimal_threshold:.2f}")
 print(f"  {'='*52}")
-
-# Update the variable for the rest of the code
-ORIGINAL_OPT_THRESHOLD = OPTIMAL_THRESHOLD  # Save original
-
-if optimized_is_better:
-    FINAL_THRESHOLD = OPTIMAL_THRESHOLD
-else:
-    FINAL_THRESHOLD = 0.50
-    
-optimal_threshold = FINAL_THRESHOLD
-
-# Store the key that exists in cv_results
-CV_OPT_KEY = f'Optimized ({ORIGINAL_OPT_THRESHOLD:.2f})'
 
 # =============================================================================
 # PHASE 7: SAVE MODEL AND RESULTS
@@ -867,7 +899,7 @@ os.makedirs('Results', exist_ok=True)
 os.makedirs('Images', exist_ok=True)
 
 # --- Save trained model ---
-model_path = 'Results/RF_detection_5bus.pkl'
+model_path = 'Results/RF_detection_13bus.pkl'
 joblib.dump(rf_optimizado, model_path)
 print(f"  ✅ Model saved: {model_path}")
 
@@ -955,7 +987,7 @@ results_summary = {
     }
 }
 
-results_path = 'Results/RF_detection_5bus_summary.json'
+results_path = 'Results/RF_detection_13bus_summary.json'
 with open(results_path, 'w') as f:
     json.dump(results_summary, f, indent=2)
 print(f"  ✅ Summary saved: {results_path}")
@@ -1060,6 +1092,9 @@ for bar, val in zip(bars_fi, df_importance['Importance'][::-1]):
 ax3.set_xlabel('Importance', fontsize=10)
 ax3.set_title('Feature Importance (MDI)', fontsize=12, fontweight='bold')
 
+max_importance = df_importance['Importance'].max()
+ax3.set_xlim(0, max_importance * 1.25)  # 25% extra space for labels
+
 legend_fi = [
     Patch(facecolor='#e74c3c', label=f'Current Angles ({imp_phi_currents*100:.1f}%)'),   # ✅ FIXED
     Patch(facecolor='#f39c12', label=f'Voltage Angles ({imp_phi_voltage*100:.1f}%)'),
@@ -1126,14 +1161,33 @@ bars_o = ax6.bar(x_bar + width_bar/2, optimal_counts, width_bar,
                   label=f'Optimized ({optimal_threshold:.2f})', color='#4CAF50', alpha=0.8,
                   edgecolor='black', linewidth=0.5)
 
+# Set reasonable y-axis limits
+max_count = max(max(default_counts), max(optimal_counts), 1)  # At least 1 to avoid weird scaling
+ax6.set_ylim(0, max_count * 1.3)  # 30% padding above max value
+
+# Smart label positioning
 for bar in bars_d:
-    ax6.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.1,
-             f'{int(bar.get_height())}', ha='center', va='bottom',
-             fontsize=12, fontweight='bold')
+    height = bar.get_height()
+    # Position label inside bar if tall enough, otherwise above
+    if height > max_count * 0.1:
+        ax6.text(bar.get_x() + bar.get_width()/2., height/2,
+                 f'{int(height)}', ha='center', va='center',
+                 fontsize=12, fontweight='bold', color='white')
+    else:
+        ax6.text(bar.get_x() + bar.get_width()/2., height + max_count * 0.05,
+                 f'{int(height)}', ha='center', va='bottom',
+                 fontsize=12, fontweight='bold')
+
 for bar in bars_o:
-    ax6.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.1,
-             f'{int(bar.get_height())}', ha='center', va='bottom',
-             fontsize=12, fontweight='bold')
+    height = bar.get_height()
+    if height > max_count * 0.1:
+        ax6.text(bar.get_x() + bar.get_width()/2., height/2,
+                 f'{int(height)}', ha='center', va='center',
+                 fontsize=12, fontweight='bold', color='white')
+    else:
+        ax6.text(bar.get_x() + bar.get_width()/2., height + max_count * 0.05,
+                 f'{int(height)}', ha='center', va='bottom',
+                 fontsize=12, fontweight='bold')
 
 ax6.set_ylabel('Total Count (across 5 folds)', fontsize=10)
 ax6.set_title('FN vs FP Trade-off (5-Fold CV)', fontsize=12, fontweight='bold')
@@ -1399,8 +1453,8 @@ RANDOM FOREST DETECTION MODEL - COMPLETE ✅
   Files generated:
   │
   ├── Results/
-  │   ├── RF_detection_5bus.pkl           (trained model)
-  │   ├── RF_detection_5bus_summary.json  (complete config & results)
+  │   ├── RF_detection_13bus.pkl           (trained model)
+  │   ├── RF_detection_13bus_summary.json  (complete config & results)
   │   ├── RF_cv_default.csv               (CV - default threshold)
   │   ├── RF_cv_optimized.csv             (CV - optimized threshold)
   │   ├── RF_threshold_sweep.csv          (all thresholds evaluated)

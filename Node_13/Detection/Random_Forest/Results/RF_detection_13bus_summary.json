@@ -1,7 +1,7 @@
 {
   "model": "Random Forest",
   "task": "Fault Detection (Binary)",
-  "system": "IEEE 5-Bus",
+  "system": "IEEE 13-Bus",
   "samples": 2246,
   "features": [
     "Va",

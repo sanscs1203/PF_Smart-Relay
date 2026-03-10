@@ -1,6 +1,6 @@
 # =============================================================================
-# RANDOM FOREST - FAULT DETECTION MODEL
-# Smart Relay - IEEE 13-Bus Test System
+# SVM (RBF Kernel) - FAULT DETECTION MODEL
+# Smart Relay - IEEE 5-Bus Test System
 #
 # Score based on AHP weights (Saaty, 1980) - CR = 0.0032
 # Metrics derived from IEEE C37.100 / IEC 60255:
@@ -15,7 +15,9 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC                          
+from sklearn.preprocessing import StandardScaler  
+from sklearn.inspection import permutation_importance   
 import json
 import joblib
 from sklearn.metrics import (
@@ -49,7 +51,7 @@ print("PHASE 1: DATA LOADING AND EXPLORATION")
 print("=" * 70)
 
 # Load dataset
-file = '~/CODES/PF_Smart-Relay/Node_13/DataSet_Nodes_13.csv'
+file = '~/CODES/PF_Smart-Relay/Node_5/DataSet_Nodes_5.csv'
 df = pd.read_csv(file, sep=';', decimal=',')
 
 # Fix: convert RF and Factor_Carga to float (handle comma decimals)
@@ -180,6 +182,36 @@ print(f"Original dataset: Fault={y.mean():.2%}  |  No Fault={1-y.mean():.2%}")
 print(f"Train:            Fault={y_train.mean():.2%}  |  No Fault={1-y_train.mean():.2%}")
 print(f"Test:             Fault={y_test.mean():.2%}  |  No Fault={1-y_test.mean():.2%}")
 
+print("\n" + "=" * 60)
+print("FEATURE SCALING (StandardScaler)")
+print("=" * 60)
+
+scaler = StandardScaler()
+
+# fit ONLY on training data to prevent data leakage
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Convert back to DataFrame for consistency
+X_train_scaled = pd.DataFrame(X_train_scaled, columns=features, index=X_train.index)
+X_test_scaled = pd.DataFrame(X_test_scaled, columns=features, index=X_test.index)
+
+print(f"\nScaler fitted on training data only (no data leakage) ✅")
+print(f"\nScaling parameters learned from training set:")
+print(f"  {'Feature':<12} {'Mean':>12} {'Std':>12}")
+print(f"  {'-'*38}")
+for i, feat in enumerate(features):
+    print(f"  {feat:<12} {scaler.mean_[i]:>12.4f} {scaler.scale_[i]:>12.4f}")
+
+# Verify scaling results
+print(f"\nVerification (Training set after scaling):")
+print(f"  Mean ≈ 0: {X_train_scaled.mean().mean():.6f}")
+print(f"  Std  ≈ 1: {X_train_scaled.std().mean():.6f}")
+
+print(f"\nVerification (Test set after scaling):")
+print(f"  Mean: {X_test_scaled.mean().mean():.6f} (may differ slightly from 0)")
+print(f"  Std:  {X_test_scaled.std().mean():.6f} (may differ slightly from 1)")
+
 # =============================================================================
 # PHASE 3: HYPERPARAMETER OPTIMIZATION (GridSearchCV)
 # =============================================================================
@@ -229,17 +261,14 @@ custom_scorer = make_scorer(
 
 # --- Define hyperparameter search space ---
 param_grid = {
-    'n_estimators':      [100, 200, 300, 500],
-    'max_depth':         [5, 10, 15, 20, None],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf':  [1, 2, 4],
-    'max_features':      ['sqrt', 'log2']
+    'C':     [0.1, 1, 10, 100, 1000],      
+    'gamma': ['scale', 'auto', 0.001, 0.01, 0.1, 1]  
 }
 
 print("=" * 60)
 print("GRIDSEARCHCV CONFIGURATION")
 print("=" * 60)
-total_combinations = 4 * 5 * 3 * 3 * 2
+total_combinations = 5 * 6
 print(f"Total combinations: {total_combinations}")
 print(f"Total fits (x5 folds): {total_combinations * 5}")
 print(f"\nScoring: AHP composite score (CR = 0.0032)")
@@ -251,10 +280,11 @@ print(f"  ROC-AUC weight:     {W_AUC:.4f}")
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=242)
 
 grid_search = GridSearchCV(
-    estimator=RandomForestClassifier(
+    estimator=SVC(
+        kernel='rbf',
         class_weight='balanced',
-        random_state=242,
-        n_jobs=1
+        probability=True,        
+        random_state=242
     ),
     param_grid=param_grid,
     scoring=custom_scorer,
@@ -265,7 +295,7 @@ grid_search = GridSearchCV(
 )
 
 print("\nStarting hyperparameter search...\n")
-grid_search.fit(X_train, y_train)
+grid_search.fit(X_train_scaled, y_train)
 
 print(f"\n✅ Search completed")
 print(f"Best AHP Score (CV): {grid_search.best_score_:.4f}")
@@ -285,21 +315,20 @@ top5_detailed = []
 
 for i, (_, row) in enumerate(top5.iterrows()):
 
-    # Recreate model with the hyperparameters of this combination
     params = row['params']
-    model_temp = RandomForestClassifier(
+    
+    model_temp = SVC(
         **params,
+        kernel='rbf',
         class_weight='balanced',
-        random_state=242,
-        n_jobs=-1
+        probability=True,
+        random_state=242
     )
-    model_temp.fit(X_train, y_train)
+    model_temp.fit(X_train_scaled, y_train)
 
-    # --- Predictions on test set ---
-    y_pred_temp = model_temp.predict(X_test)
-    y_proba_temp = model_temp.predict_proba(X_test)[:, 1]
+    y_pred_temp = model_temp.predict(X_test_scaled)
+    y_proba_temp = model_temp.predict_proba(X_test_scaled)[:, 1]
 
-    # --- Compute individual metrics ---
     rec = recall_score(y_test, y_pred_temp)
 
     try:
@@ -310,21 +339,24 @@ for i, (_, row) in enumerate(top5.iterrows()):
     tn, fp, fn, tp = confusion_matrix(y_test, y_pred_temp).ravel()
     spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
 
-    # --- AHP composite score ---
     score_final = (
         W_RECALL      * rec  +
         W_SPECIFICITY * spec +
         W_AUC         * auc
     )
 
-    # --- Compute model complexity (for tie-breaking) ---
-    n_estimators = params.get('n_estimators', 100)
-    max_depth = params.get('max_depth', 999)
-    if max_depth is None:
-        max_depth = 999  # None means unlimited depth → highest complexity
-    complexity = n_estimators * max_depth
+    C_val = params.get('C', 1)
+    gamma_val = params.get('gamma', 'scale')
+    
+    if gamma_val == 'scale':
+        gamma_numeric = 1 / (X_train_scaled.shape[1] * X_train_scaled.var().mean())
+    elif gamma_val == 'auto':
+        gamma_numeric = 1 / X_train_scaled.shape[1]
+    else:
+        gamma_numeric = gamma_val
+    
+    complexity = C_val * gamma_numeric
 
-    # Store detailed results
     top5_detailed.append({
         'rank': i + 1,
         'params': params,
@@ -344,8 +376,9 @@ for i, (_, row) in enumerate(top5.iterrows()):
     print(f"  {'ROC-AUC':<20} {auc:>10.4f} {W_AUC:>10.4f} {W_AUC*auc:>14.4f}")
     print(f"  {'-'*56}")
     print(f"  {'AHP SCORE':<20} {score_final:>10.4f}")
-    print(f"  Complexity: {complexity}")
+    print(f"  Complexity: {complexity:.6f}")
     print(f"  Params: {params}")
+    
 
 # =============================================================================
 # DETERMINISTIC MODEL SELECTION
@@ -353,11 +386,12 @@ for i, (_, row) in enumerate(top5.iterrows()):
 
 df_top5 = pd.DataFrame(top5_detailed)
 
-# Round AHP scores to 4 decimals to group truly equivalent models
+# DEBUG - Descomenta si sigue fallando
+# print("DEBUG - Columns:", df_top5.columns.tolist())
+
 df_top5['ahp_rounded'] = df_top5['ahp_score'].round(4)
 best_ahp_rounded = df_top5['ahp_rounded'].max()
 
-# Among tied models, select the SIMPLEST (lowest complexity) - Occam's razor
 tied_models = df_top5[df_top5['ahp_rounded'] == best_ahp_rounded]
 best_idx = tied_models['complexity'].idxmin()
 best_entry = df_top5.loc[best_idx]
@@ -373,13 +407,13 @@ print(f"\n  Selection criteria:")
 print(f"  1. Highest AHP score (rounded to 4 decimals)")
 print(f"  2. Among ties: lowest complexity (Occam's razor)")
 print(f"\n  AHP Score: {best_score_final:.4f}")
-print(f"  Complexity: {best_entry['complexity']}")
+print(f"  Complexity: {best_entry['complexity']:.6f}")
 print(f"  Tied models: {len(tied_models)}")
 print(f"\n  Hyperparameters:")
 for param, value in best_params_final.items():
     print(f"    {param}: {value}")
 
-rf_optimizado = best_model_final
+svm_optimizado = best_model_final
 
 # =============================================================================
 # PHASE 4: EVALUATION OF OPTIMIZED MODEL (Default Threshold)
@@ -389,11 +423,11 @@ print("\n" + "=" * 70)
 print("PHASE 4: EVALUATION OF OPTIMIZED MODEL (Default Threshold)")
 print("=" * 70)
 
-y_pred = rf_optimizado.predict(X_test)
-y_proba = rf_optimizado.predict_proba(X_test)[:, 1]
+y_pred = svm_optimizado.predict(X_test)
+y_proba = svm_optimizado.predict_proba(X_test)[:, 1]
 
 print("\n" + "=" * 60)
-print("OPTIMIZED RANDOM FOREST - TEST SET RESULTS")
+print("OPTIMIZED SVM - TEST SET RESULTS")
 print("=" * 60)
 
 # --- Quick overview of predictions ---
@@ -470,41 +504,63 @@ print(f"\n  Weighting method: AHP (Saaty, 1980)")
 print(f"  Consistency Ratio: CR = 0.0032 ✅ (< 0.10)")
 
 # =============================================================================
-# FEATURE IMPORTANCE ANALYSIS
+# FEATURE IMPORTANCE ANALYSIS (Permutation Importance)
 # =============================================================================
 
 print("\n" + "=" * 60)
-print("FEATURE IMPORTANCE")
+print("FEATURE IMPORTANCE (Permutation-based)")
 print("=" * 60)
 
-importances = rf_optimizado.feature_importances_
-feature_names = X.columns.tolist()
+print("\n  Computing permutation importance (this may take a moment)...")
 
+# Compute permutation importance on test set
+perm_importance = permutation_importance(
+    svm_optimizado, 
+    X_test_scaled, 
+    y_test,
+    n_repeats=30,
+    random_state=242,
+    scoring='recall'  # Use recall as it's our primary metric
+)
+
+# Create DataFrame with results
 df_importance = pd.DataFrame({
-    'Feature': feature_names,
-    'Importance': importances
+    'Feature': features,
+    'Importance': perm_importance.importances_mean,
+    'Std': perm_importance.importances_std
 }).sort_values('Importance', ascending=False)
 
-print("\n  Feature Ranking:")
-print(f"  {'#':<4} {'Feature':<12} {'Importance':>12} {'Cumulative':>12}")
-print(f"  {'-'*42}")
+print("\n  Feature Ranking (Permutation Importance):")
+print(f"  {'#':<4} {'Feature':<12} {'Importance':>12} {'± Std':>10} {'Cumulative':>12}")
+print(f"  {'-'*52}")
+
+# Normalize importances to sum to 1 for comparison with RF
+total_importance = df_importance['Importance'].sum()
+if total_importance > 0:
+    df_importance['Importance_Normalized'] = df_importance['Importance'] / total_importance
+else:
+    df_importance['Importance_Normalized'] = 0
 
 cumulative = 0
 for i, (_, row) in enumerate(df_importance.iterrows()):
-    cumulative += row['Importance']
-    print(f"  {i+1:<4} {row['Feature']:<12} {row['Importance']:>12.4f} {cumulative:>12.4f}")
+    cumulative += row['Importance_Normalized']
+    print(f"  {i+1:<4} {row['Feature']:<12} {row['Importance']:>12.4f} {row['Std']:>10.4f} {cumulative:>12.4f}")
 
-# Group by type
-imp_mag_voltage = df_importance[df_importance['Feature'].isin(['Va', 'Vb', 'Vc'])]['Importance'].sum()
-imp_phi_voltage = df_importance[df_importance['Feature'].isin(['phi_Va', 'phi_Vb', 'phi_Vc'])]['Importance'].sum()
-imp_mag_currents = df_importance[df_importance['Feature'].isin(['Ia', 'Ib', 'Ic'])]['Importance'].sum()
-imp_phi_currents = df_importance[df_importance['Feature'].isin(['phi_Ia', 'phi_Ib', 'phi_Ic'])]['Importance'].sum()
+# Group by type (using normalized importances)
+imp_mag_voltage = df_importance[df_importance['Feature'].isin(['Va', 'Vb', 'Vc'])]['Importance_Normalized'].sum()
+imp_phi_voltage = df_importance[df_importance['Feature'].isin(['phi_Va', 'phi_Vb', 'phi_Vc'])]['Importance_Normalized'].sum()
+imp_mag_currents = df_importance[df_importance['Feature'].isin(['Ia', 'Ib', 'Ic'])]['Importance_Normalized'].sum()
+imp_phi_currents = df_importance[df_importance['Feature'].isin(['phi_Ia', 'phi_Ib', 'phi_Ic'])]['Importance_Normalized'].sum()
 
-print(f"\n  Contribution by group:")
-print(f"  Voltages Magnitude (Va, Vb, Vc):     {imp_mag_voltage:.4f} ({imp_mag_voltage*100:.1f}%)")
-print(f"  Voltages Angle (θVa, θVb, θVc):     {imp_phi_voltage:.4f} ({imp_phi_voltage*100:.1f}%)")
-print(f"  Currents Magnitude (Ia, Ib, Ic):     {imp_mag_currents:.4f} ({imp_mag_currents*100:.1f}%)")
-print(f"  Currents Angle (θIa, θIb, θIc):     {imp_phi_currents:.4f} ({imp_phi_currents*100:.1f}%)")
+print(f"\n  Contribution by group (normalized):")
+print(f"  Voltage Magnitudes (Va, Vb, Vc):      {imp_mag_voltage:.4f} ({imp_mag_voltage*100:.1f}%)")
+print(f"  Voltage Angles (φVa, φVb, φVc):       {imp_phi_voltage:.4f} ({imp_phi_voltage*100:.1f}%)")
+print(f"  Current Magnitudes (Ia, Ib, Ic):      {imp_mag_currents:.4f} ({imp_mag_currents*100:.1f}%)")
+print(f"  Current Angles (φIa, φIb, φIc):       {imp_phi_currents:.4f} ({imp_phi_currents*100:.1f}%)")
+
+print(f"\n  Note: Permutation importance measures the decrease in model")
+print(f"        performance when a feature's values are randomly shuffled.")
+print(f"        Higher values indicate more important features.")
 
 # =============================================================================
 # PHASE 5: DECISION THRESHOLD OPTIMIZATION
@@ -691,7 +747,7 @@ else:
     print(f"\n  Optimal threshold = Default (0.50)")
     print(f"  Evaluating single threshold only (no comparison needed)")
 
-print(f"\n  Model: Random Forest")
+print(f"\n  Model: SVM (RBF Kernel)")
 print(f"  Hyperparameters: {BEST_PARAMS}")
 print(f"  Thresholds: {list(THRESHOLDS.values())}")
 print(f"\n  AHP Weights (CR = 0.0032):")
@@ -712,18 +768,24 @@ for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y), 1):
     y_train_fold = y.iloc[train_idx]
     X_val_fold   = X.iloc[val_idx]
     y_val_fold   = y.iloc[val_idx]
-    
+
     print(f"  Train: {len(train_idx)} | Val: {len(val_idx)}")
-    
-    model_fold = RandomForestClassifier(
+
+    # Scale WITHIN each fold (prevents data leakage)
+    scaler_fold = StandardScaler()
+    X_train_fold_scaled = scaler_fold.fit_transform(X_train_fold)
+    X_val_fold_scaled = scaler_fold.transform(X_val_fold)
+
+    model_fold = SVC(
         **BEST_PARAMS,
+        kernel='rbf',
         class_weight='balanced',
-        random_state=242,
-        n_jobs=-1
+        probability=True,
+        random_state=242
     )
-    model_fold.fit(X_train_fold, y_train_fold)
-    
-    y_proba_fold = model_fold.predict_proba(X_val_fold)[:, 1]
+    model_fold.fit(X_train_fold_scaled, y_train_fold)
+
+    y_proba_fold = model_fold.predict_proba(X_val_fold_scaled)[:, 1]
     
     try:
         auc_fold = roc_auc_score(y_val_fold, y_proba_fold)
@@ -899,9 +961,14 @@ os.makedirs('Results', exist_ok=True)
 os.makedirs('Images', exist_ok=True)
 
 # --- Save trained model ---
-model_path = 'Results/RF_detection_13bus.pkl'
-joblib.dump(rf_optimizado, model_path)
+model_path = 'Results/SVM_detection_5bus.pkl'
+joblib.dump(svm_optimizado, model_path)
 print(f"  ✅ Model saved: {model_path}")
+
+# --- Save scaler (REQUIRED for SVM deployment) ---
+scaler_path = 'Results/SVM_scaler_5bus.pkl'
+joblib.dump(scaler, scaler_path)
+print(f"  ✅ Scaler saved: {scaler_path}")
 
 # --- Prepare CV dataframes (handle potential threshold revert) ---
 df_cv_def = pd.DataFrame(cv_results['Default (0.50)'])
@@ -917,13 +984,21 @@ else:
 
 # --- Save complete results summary as JSON ---
 results_summary = {
-    'model': 'Random Forest',
+    'model': 'SVM (RBF Kernel)',
     'task': 'Fault Detection (Binary)',
-    'system': 'IEEE 13-Bus',
+    'system': 'IEEE 5-Bus',
     'samples': int(X.shape[0]),
     'features': features,
-    'hyperparameters': {k: (str(v) if v is None else v) for k, v in best_params_final.items()},
+    'hyperparameters': {k: (str(v) if isinstance(v, str) else v) for k, v in best_params_final.items()},
     'optimal_threshold': float(optimal_threshold),
+    'scaling': {
+        'method': 'StandardScaler',
+        'fitted_on': 'training_set_only',
+        'parameters': {
+            'mean': {feat: float(scaler.mean_[i]) for i, feat in enumerate(features)},
+            'scale': {feat: float(scaler.scale_[i]) for i, feat in enumerate(features)}
+        }
+    },
     'ahp_config': {
         'weights': {
             'Recall': W_RECALL,
@@ -979,32 +1054,35 @@ results_summary = {
         }
     },
     'feature_importance': {
+        'method': 'Permutation Importance',
+        'scoring_metric': 'recall',
+        'n_repeats': 30,
         'ranking': df_importance.to_dict('records'),
-        'currents_magnitude_contribution': float(imp_mag_currents),
-        'currents_angle_contribution': float(imp_phi_currents),
-        'voltages_magnitude_contribution': float(imp_mag_voltage),
-        'voltages_angle_contribution': float(imp_phi_voltage)  # ✅ FIXED
+        'voltage_magnitude_contribution': float(imp_mag_voltage),
+        'voltage_angle_contribution': float(imp_phi_voltage),
+        'current_magnitude_contribution': float(imp_mag_currents),
+        'current_angle_contribution': float(imp_phi_currents)
     }
 }
 
-results_path = 'Results/RF_detection_13bus_summary.json'
+results_path = 'Results/SVM_detection_5bus_summary.json'
 with open(results_path, 'w') as f:
     json.dump(results_summary, f, indent=2)
 print(f"  ✅ Summary saved: {results_path}")
 
 # --- Save CV results as CSV ---
-df_cv_def.to_csv('Results/RF_cv_default.csv', index=False)
-df_cv_opt.to_csv('Results/RF_cv_optimized.csv', index=False)
-print("  ✅ CV results saved: Results/RF_cv_default.csv")
-print("  ✅ CV results saved: Results/RF_cv_optimized.csv")
+df_cv_def.to_csv('Results/SVM_cv_default.csv', index=False)
+df_cv_opt.to_csv('Results/SVM_cv_optimized.csv', index=False)
+print("  ✅ CV results saved: Results/SVM_cv_default.csv")
+print("  ✅ CV results saved: Results/SVM_cv_optimized.csv")
 
 # --- Save threshold sweep ---
-df_sweep.to_csv('Results/RF_threshold_sweep.csv', index=False)
-print("  ✅ Threshold sweep saved: Results/RF_threshold_sweep.csv")
+df_sweep.to_csv('Results/SVM_threshold_sweep.csv', index=False)
+print("  ✅ Threshold sweep saved: Results/SVM_threshold_sweep.csv")
 
 # --- Save feature importance ---
-df_importance.to_csv('Results/RF_feature_importance.csv', index=False)
-print("  ✅ Feature importance saved: Results/RF_feature_importance.csv")
+df_importance.to_csv('Results/SVM_feature_importance.csv', index=False)
+print("  ✅ Feature importance saved: Results/SVM_feature_importance.csv")
 
 # =============================================================================
 # PHASE 8: FINAL VISUALIZATION AND DOCUMENTATION
@@ -1017,8 +1095,8 @@ print("=" * 70)
 fig = plt.figure(figsize=(20, 14))
 gs = GridSpec(3, 3, figure=fig, hspace=0.35, wspace=0.30)
 
-fig.suptitle('Random Forest - Fault Detection Model\n'
-             'IEEE 13-Bus Test System | AHP Composite Score (CR = 0.0032)',
+fig.suptitle('SVM (RBF Kernel) - Fault Detection Model\n'
+             'IEEE 5-Bus Test System | AHP Composite Score (CR = 0.0032)',
              fontsize=16, fontweight='bold', y=1.02)
 
 # --- Panel 1: ROC Curve ---
@@ -1080,23 +1158,23 @@ colors_fi = [
 
 bars_fi = ax3.barh(
     df_importance['Feature'][::-1],
-    df_importance['Importance'][::-1],
+    df_importance['Importance_Normalized'][::-1],
     color=colors_fi[::-1],
     edgecolor='white', linewidth=0.5
 )
 
-for bar, val in zip(bars_fi, df_importance['Importance'][::-1]):
+for bar, val in zip(bars_fi, df_importance['Importance_Normalized'][::-1]):
     ax3.text(bar.get_width() + 0.005, bar.get_y() + bar.get_height()/2,
              f'{val:.4f}', va='center', fontsize=9)
 
-ax3.set_xlabel('Importance', fontsize=10)
+ax3.set_xlabel('Importance_Normalized', fontsize=10)
 ax3.set_title('Feature Importance (MDI)', fontsize=12, fontweight='bold')
 
-max_importance = df_importance['Importance'].max()
+max_importance = df_importance['Importance_Normalized'].max()
 ax3.set_xlim(0, max_importance * 1.25)  # 25% extra space for labels
 
 legend_fi = [
-    Patch(facecolor='#e74c3c', label=f'Current Angles ({imp_phi_currents*100:.1f}%)'),   # ✅ FIXED
+    Patch(facecolor='#e74c3c', label=f'Current Angles ({imp_phi_currents*100:.1f}%)'),   
     Patch(facecolor='#f39c12', label=f'Voltage Angles ({imp_phi_voltage*100:.1f}%)'),
     Patch(facecolor='#27ae60', label=f'Current Magnitudes ({imp_mag_currents*100:.1f}%)'),
     Patch(facecolor='#3498db', label=f'Voltage Magnitudes ({imp_mag_voltage*100:.1f}%)')
@@ -1244,15 +1322,15 @@ ax7.legend(fontsize=9, loc='lower right', ncol=3)
 ax7.set_xlim(0, 1.05)
 ax7.grid(True, alpha=0.3, axis='x')
 
-plt.savefig('Images/RF_detection_dashboard.png', dpi=200, bbox_inches='tight')
-print("  📊 Dashboard saved: Images/RF_detection_dashboard.png")
+plt.savefig('Images/SVM_detection_dashboard.png', dpi=200, bbox_inches='tight')
+print("  📊 Dashboard saved: Images/SVM_detection_dashboard.png")
 
 # =============================================================================
 # FIGURE 2: PROBABILITY DISTRIBUTION ANALYSIS
 # =============================================================================
 
 fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
-fig2.suptitle('Probability Distribution Analysis - Random Forest Detection',
+fig2.suptitle('Probability Distribution Analysis - SVM Detection',
               fontsize=14, fontweight='bold')
 
 # --- Panel 1: Histogram ---
@@ -1307,8 +1385,8 @@ ax_p2.legend(fontsize=9)
 ax_p2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('Images/RF_probability_analysis.png', dpi=150, bbox_inches='tight')
-print("  📊 Probability analysis saved: Images/RF_probability_analysis.png")
+plt.savefig('Images/SVM_probability_analysis.png', dpi=150, bbox_inches='tight')
+print("  📊 Probability analysis saved: Images/SVM_probability_analysis.png")
 
 # =============================================================================
 # SUMMARY TABLES FOR THESIS
@@ -1353,15 +1431,15 @@ print(f"""
 ├──────────────────────────┬──────────────────────────────────────────┤
 │ Parameter                │ Value                                    │
 ├──────────────────────────┼──────────────────────────────────────────┤
-│ Algorithm                │ Random Forest                            │
-│ n_estimators             │ {best_params_final['n_estimators']:<40} │
-│ max_depth                │ {str(best_params_final['max_depth']):<40} │
-│ min_samples_split        │ {best_params_final['min_samples_split']:<40} │
-│ min_samples_leaf         │ {best_params_final['min_samples_leaf']:<40} │
-│ max_features             │ {best_params_final['max_features']:<40} │
+│ Algorithm                │ SVM (RBF Kernel)                         │
+│ C (Regularization)       │ {best_params_final['C']:<40} │
+│ gamma (Kernel coef.)     │ {str(best_params_final['gamma']):<40} │
+│ kernel                   │ rbf                                      │
 │ class_weight             │ balanced                                 │
+│ probability              │ True                                     │
 │ Decision threshold       │ {optimal_threshold:<40.2f} │
-│ Optimization method      │ GridSearchCV (360 combinations × 5 CV)  │
+│ Scaling                  │ StandardScaler (fitted on train only)   │
+│ Optimization method      │ GridSearchCV (30 combinations × 5 CV)   │
 │ Selection criteria       │ AHP Score + Occam's razor tie-breaking  │
 └──────────────────────────┴──────────────────────────────────────────┘
 """)
@@ -1447,24 +1525,29 @@ print(f"""
 print(f"""
 
 {'='*70}
-RANDOM FOREST DETECTION MODEL - COMPLETE ✅
+SVM (RBF KERNEL) DETECTION MODEL - COMPLETE ✅
 {'='*70}
 
   Files generated:
   │
   ├── Results/
-  │   ├── RF_detection_13bus.pkl           (trained model)
-  │   ├── RF_detection_13bus_summary.json  (complete config & results)
-  │   ├── RF_cv_default.csv               (CV - default threshold)
-  │   ├── RF_cv_optimized.csv             (CV - optimized threshold)
-  │   ├── RF_threshold_sweep.csv          (all thresholds evaluated)
-  │   └── RF_feature_importance.csv       (feature ranking)
+  │   ├── SVM_detection_13bus.pkl          (trained model)
+  │   ├── SVM_scaler_13bus.pkl             (StandardScaler - REQUIRED)
+  │   ├── SVM_detection_13bus_summary.json (complete config & results)
+  │   ├── SVM_cv_default.csv              (CV - default threshold)
+  │   ├── SVM_cv_optimized.csv            (CV - optimized threshold)
+  │   ├── SVM_threshold_sweep.csv         (all thresholds evaluated)
+  │   └── SVM_feature_importance.csv      (permutation importance)
   │
   └── Images/
-      ├── RF_detection_dashboard.png      (7-panel summary)
-      └── RF_probability_analysis.png     (probability distributions)
+      ├── SVM_detection_dashboard.png     (7-panel summary)
+      └── SVM_probability_analysis.png    (probability distributions)
 
   Final Threshold: {optimal_threshold:.2f}
   {'(Same as default)' if optimal_threshold == 0.5 else '(Optimized from 0.50)'}
+  
+  ⚠️  IMPORTANT: For deployment, load BOTH model and scaler:
+      model = joblib.load('Results/SVM_detection_13bus.pkl')
+      scaler = joblib.load('Results/SVM_scaler_13bus.pkl')
 
 """)

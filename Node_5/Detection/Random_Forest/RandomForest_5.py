@@ -1097,7 +1097,7 @@ max_importance = df_importance['Importance'].max()
 ax3.set_xlim(0, max_importance * 1.25)  # 25% extra space for labels
 
 legend_fi = [
-    Patch(facecolor='#e74c3c', label=f'Current Angles ({imp_phi_currents*100:.1f}%)'),   # ✅ FIXED
+    Patch(facecolor='#e74c3c', label=f'Current Angles ({imp_phi_currents*100:.1f}%)'),   
     Patch(facecolor='#f39c12', label=f'Voltage Angles ({imp_phi_voltage*100:.1f}%)'),
     Patch(facecolor='#27ae60', label=f'Current Magnitudes ({imp_mag_currents*100:.1f}%)'),
     Patch(facecolor='#3498db', label=f'Voltage Magnitudes ({imp_mag_voltage*100:.1f}%)')

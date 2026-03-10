@@ -1,0 +1,230 @@
+{
+  "model": "SVM (RBF Kernel)",
+  "task": "Fault Detection (Binary)",
+  "system": "IEEE 13-Bus",
+  "samples": 2246,
+  "features": [
+    "Va",
+    "Vb",
+    "Vc",
+    "phi_Va",
+    "phi_Vb",
+    "phi_Vc",
+    "Ia",
+    "Ib",
+    "Ic",
+    "phi_Ia",
+    "phi_Ib",
+    "phi_Ic"
+  ],
+  "hyperparameters": {
+    "C": 0.1,
+    "gamma": 0.001
+  },
+  "optimal_threshold": 0.5,
+  "scaling": {
+    "method": "StandardScaler",
+    "fitted_on": "training_set_only",
+    "parameters": {
+      "mean": {
+        "Va": 127.00201224944321,
+        "Vb": 127.00940423162584,
+        "Vc": 127.01004231625836,
+        "phi_Va": -12.299408358546772,
+        "phi_Vb": -111.45095826341313,
+        "phi_Vc": 86.85254285017261,
+        "Ia": 28.345228106904237,
+        "Ib": 23.492727819599107,
+        "Ic": 24.368097177060136,
+        "phi_Ia": -49.91350679844098,
+        "phi_Ib": -92.39290979955459,
+        "phi_Ic": 85.38441187082405
+      },
+      "scale": {
+        "Va": 0.004918700425007397,
+        "Vb": 0.001958154646899052,
+        "Vc": 0.0022985402509579783,
+        "phi_Va": 36.387659710937164,
+        "phi_Vb": 30.8726819073547,
+        "phi_Vc": 76.34677450737301,
+        "Ia": 23.90007193488351,
+        "Ib": 24.949939080241585,
+        "Ic": 21.59940909220627,
+        "phi_Ia": 15.903194734492981,
+        "phi_Ib": 131.1060797801975,
+        "phi_Ic": 20.04055238883235
+      }
+    }
+  },
+  "ahp_config": {
+    "weights": {
+      "Recall": 0.6483,
+      "Specificity": 0.122,
+      "ROC_AUC": 0.2297
+    },
+    "CR": 0.0032,
+    "pairwise_matrix": {
+      "Recall_vs_Specificity": 5,
+      "Recall_vs_ROC_AUC": 3,
+      "ROC_AUC_vs_Specificity": 2
+    }
+  },
+  "test_set_results": {
+    "default_threshold": {
+      "threshold": 0.5,
+      "recall": 1.0,
+      "specificity": 0.0,
+      "roc_auc": 0.5,
+      "precision": 0.8977777777777778,
+      "accuracy": 0.8977777777777778,
+      "ahp_score": 0.76315,
+      "confusion_matrix": {
+        "TN": 0,
+        "FP": 46,
+        "FN": 0,
+        "TP": 404
+      }
+    },
+    "optimized_threshold": {
+      "threshold": 0.5,
+      "recall": 1.0,
+      "specificity": 0.0,
+      "roc_auc": 0.5,
+      "precision": 0.8977777777777778,
+      "accuracy": 0.8977777777777778,
+      "ahp_score": 0.76315,
+      "confusion_matrix": {
+        "TN": 0,
+        "FP": 46,
+        "FN": 0,
+        "TP": 404
+      }
+    }
+  },
+  "cv_results": {
+    "n_folds": 5,
+    "default_threshold": {
+      "recall": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "specificity": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "roc_auc": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "ahp_score": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "total_FN": 0,
+      "total_FP": 0
+    },
+    "optimized_threshold": {
+      "recall": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "specificity": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "roc_auc": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "ahp_score": {
+        "mean": 1.0,
+        "std": 0.0
+      },
+      "total_FN": 0,
+      "total_FP": 0
+    }
+  },
+  "feature_importance": {
+    "method": "Permutation Importance",
+    "scoring_metric": "recall",
+    "n_repeats": 30,
+    "ranking": [
+      {
+        "Feature": "phi_Va",
+        "Importance": 0.06551155115511548,
+        "Std": 0.007418404882174563,
+        "Importance_Normalized": 1.0
+      },
+      {
+        "Feature": "Va",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "Vb",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "Vc",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "phi_Vb",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "phi_Vc",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "Ia",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "Ib",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "Ic",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "phi_Ia",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "phi_Ib",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      },
+      {
+        "Feature": "phi_Ic",
+        "Importance": 0.0,
+        "Std": 0.0,
+        "Importance_Normalized": 0.0
+      }
+    ],
+    "voltage_magnitude_contribution": 0.0,
+    "voltage_angle_contribution": 1.0,
+    "current_magnitude_contribution": 0.0,
+    "current_angle_contribution": 0.0
+  }
+}

@@ -1,4 +1,28 @@
-virt_env/
+# ── Data — never commit raw or generated datasets ──
+data/raw/
+data/processed/
+data/splits/
+
+# ── Trained models ──
+**/detection/models/
+**/classification/models/
+
+# ── Results — generated at runtime, not versioned ──
+**/detection/results/
+**/classification/results/
+
+# ── Python ──
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# ── Jupyter ──
 .ipynb_checkpoints/
+notebooks/experiments/
+
+# ── OS ──
+.DS_Store
+Thumbs.db

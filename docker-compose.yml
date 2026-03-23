@@ -1,0 +1,371 @@
+# =============================================================================
+# docker-compose.yml — Smart Relay Project
+# IEEE 5-bus  +  IEEE 13-bus  |  pipeline completo
+#
+# Cada red tiene su propia cadena de servicios independiente.
+# Las dos cadenas NO tienen dependencias cruzadas, por lo que al
+# ejecutar `docker compose up` sin argumentos ambas corren en paralelo.
+#
+# ── Cadena IEEE 5-bus ─────────────────────────────────────────────
+#   preprocess-ieee5
+#       └── split-ieee5
+#               └── train-ieee5
+#                       └── evaluate-ieee5
+#                               └── mcdm-ieee5
+#                                       └── predict-ieee5
+#
+# ── Cadena IEEE 13-bus ────────────────────────────────────────────
+#   preprocess-ieee13
+#       └── split-ieee13
+#               └── train-ieee13
+#                       └── evaluate-ieee13
+#                               └── mcdm-ieee13
+#                                       └── predict-ieee13
+#
+# =============================================================================
+# COMANDOS DE USO
+# =============================================================================
+#
+# ── Ambas redes ───────────────────────────────────────────────────
+#   Primera ejecución (construye imagen):
+#     docker compose up --build
+#
+#   Ejecuciones siguientes:
+#     docker compose up
+#
+# ── Solo IEEE 5-bus ───────────────────────────────────────────────
+#   Pipeline completo:
+#     docker compose up preprocess-ieee5 split-ieee5 train-ieee5 \
+#                       evaluate-ieee5 mcdm-ieee5 predict-ieee5
+#
+#   Solo un paso específico (requiere pasos anteriores ya ejecutados):
+#     docker compose up train-ieee5
+#     docker compose up evaluate-ieee5
+#     docker compose up mcdm-ieee5
+#
+# ── Solo IEEE 13-bus ──────────────────────────────────────────────
+#   Pipeline completo:
+#     docker compose up preprocess-ieee13 split-ieee13 train-ieee13 \
+#                       evaluate-ieee13 mcdm-ieee13 predict-ieee13
+#
+#   Solo un paso específico:
+#     docker compose up train-ieee13
+#     docker compose up evaluate-ieee13
+#     docker compose up mcdm-ieee13
+#
+# ── Ejecución parcial (threshold + MCDM, sin re-entrenar) ─────────
+#   IEEE 5:   docker compose up evaluate-ieee5  mcdm-ieee5  predict-ieee5
+#   IEEE 13:  docker compose up evaluate-ieee13 mcdm-ieee13 predict-ieee13
+#
+# ── Utilidades ────────────────────────────────────────────────────
+#   Seguir logs en vivo:
+#     docker compose logs -f train-ieee5
+#     docker compose logs -f train-ieee13
+#
+#   Detener y limpiar contenedores:
+#     docker compose down
+#
+# =============================================================================
+# REQUISITOS PREVIOS
+# =============================================================================
+#
+#   data/raw/ieee5.csv   debe existir antes de correr la cadena ieee5.
+#   data/raw/ieee13.csv  debe existir antes de correr la cadena ieee13.
+#
+#   Todos los demás archivos (processed/, splits/, models/, results/)
+#   se generan automáticamente y quedan persistidos en el host gracias
+#   a los volúmenes ./data, ./ieee5 e ./ieee13.
+#
+# =============================================================================
+# NOTA SOBRE RECURSOS (GridSearchCV n_jobs=-1)
+# =============================================================================
+#
+#   Al correr ambas redes en paralelo con `docker compose up`, los dos
+#   servicios train-* lanzan GridSearchCV con n_jobs=-1 simultáneamente.
+#   Si la máquina no tiene RAM suficiente, ejecutar cada cadena por separado
+#   usando los comandos de "Solo IEEE X-bus" indicados arriba.
+#   Para limitar cores por contenedor, descomentar la línea `cpus` en
+#   los servicios train-ieee5 y train-ieee13.
+#
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # IEEE 5-BUS — Jetson Nano A
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # 1. Preprocesamiento
+  #    Lee:    data/raw/ieee5.csv
+  #    Genera: data/processed/ieee5/detection_data.csv
+  #            data/processed/ieee5/classif_data.csv
+  # ---------------------------------------------------------------------------
+  preprocess-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_preprocess_ieee5
+    volumes:
+      - ./data:/app/data        # raw/ entra, processed/ sale
+      - ./utils:/app/utils      # código compartido (sin copiar en imagen)
+      - ./ieee5:/app/ieee5      # config.yaml
+    command: >
+      python utils/preprocess.py --config ieee5/config.yaml
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 2. Split + escalado
+  #    Lee:    data/processed/ieee5/{detection_data,classif_data}.csv
+  #    Genera: data/processed/ieee5/scaler.pkl
+  #            data/splits/ieee5/{det,cls}_{train,val,test}.csv
+  # ---------------------------------------------------------------------------
+  split-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_split_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+    command: >
+      python utils/split.py --config ieee5/config.yaml
+    depends_on:
+      preprocess-ieee5:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 3. Entrenamiento (GridSearchCV — RF, SVM, MLP)
+  #    Lee:    data/splits/ieee5/det_{train,val}.csv
+  #            data/processed/ieee5/scaler.pkl
+  #    Genera: ieee5/detection/models/{RF,SVM,MLP}.pkl
+  #            ieee5/detection/results/cv_results_*.csv
+  #            ieee5/detection/results/overfit_check.json
+  # ---------------------------------------------------------------------------
+  train-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_train_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5      # models/ y results/ quedan persistidos aquí
+    command: >
+      python ieee5/detection/train.py --config ieee5/config.yaml
+    depends_on:
+      split-ieee5:
+        condition: service_completed_successfully
+    restart: "no"
+    # GridSearchCV usa n_jobs=-1 internamente.
+    # Descomenta la siguiente línea si quieres limitar cores en el host:
+    # cpus: "4"
+
+  # ---------------------------------------------------------------------------
+  # 4. Evaluación — threshold + métricas en test
+  #    Lee:    ieee5/detection/models/{RF,SVM,MLP}.pkl
+  #            data/splits/ieee5/det_{val,test}.csv
+  #    Genera: ieee5/detection/results/metrics_{RF,SVM,MLP}.json
+  #            ieee5/detection/results/decision_matrix.json
+  # ---------------------------------------------------------------------------
+  evaluate-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_evaluate_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+    command: >
+      python ieee5/detection/evaluate.py --config ieee5/config.yaml
+    depends_on:
+      train-ieee5:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 5. MCDM — AHP + Monte Carlo + dependability override → mejor modelo
+  #    Lee:    ieee5/detection/results/decision_matrix.json
+  #    Genera: ieee5/detection/results/mcdm_result.json
+  # ---------------------------------------------------------------------------
+  mcdm-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_mcdm_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+    command: >
+      python ieee5/detection/mcdm.py --config ieee5/config.yaml
+    depends_on:
+      evaluate-ieee5:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 6. Inferencia — verificación sobre test set en modo simulación
+  #    Lee:    ieee5/detection/results/mcdm_result.json  (mejor modelo)
+  #            ieee5/detection/results/metrics_<id>.json (threshold óptimo)
+  #            ieee5/detection/models/<id>.pkl
+  #            data/processed/ieee5/scaler.pkl
+  #            data/splits/ieee5/det_test.csv
+  #    Genera: ieee5/detection/results/predictions_sim_det_test.csv
+  #            ieee5/detection/results/validation_sim_det_test.json
+  # ---------------------------------------------------------------------------
+  predict-ieee5:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_predict_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+    command: >
+      python ieee5/detection/predict.py
+      --config ieee5/config.yaml
+      --mode sim
+      --input data/splits/ieee5/det_test.csv
+    depends_on:
+      mcdm-ieee5:
+        condition: service_completed_successfully
+    restart: "no"
+
+
+  # ===========================================================================
+  # IEEE 13-BUS — Jetson Nano B
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # 1. Preprocesamiento
+  #    Lee:    data/raw/ieee13.csv
+  #    Genera: data/processed/ieee13/detection_data.csv
+  #            data/processed/ieee13/classif_data.csv
+  # ---------------------------------------------------------------------------
+  preprocess-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_preprocess_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python utils/preprocess.py --config ieee13/config.yaml
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 2. Split + escalado
+  #    Lee:    data/processed/ieee13/{detection_data,classif_data}.csv
+  #    Genera: data/processed/ieee13/scaler.pkl
+  #            data/splits/ieee13/{det,cls}_{train,val,test}.csv
+  # ---------------------------------------------------------------------------
+  split-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_split_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python utils/split.py --config ieee13/config.yaml
+    depends_on:
+      preprocess-ieee13:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 3. Entrenamiento (GridSearchCV — RF, SVM, MLP)
+  #    Lee:    data/splits/ieee13/det_{train,val}.csv
+  #            data/processed/ieee13/scaler.pkl
+  #    Genera: ieee13/detection/models/{RF,SVM,MLP}.pkl
+  #            ieee13/detection/results/cv_results_*.csv
+  #            ieee13/detection/results/overfit_check.json
+  # ---------------------------------------------------------------------------
+  train-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_train_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python ieee13/detection/train.py --config ieee13/config.yaml
+    depends_on:
+      split-ieee13:
+        condition: service_completed_successfully
+    restart: "no"
+    # GridSearchCV usa n_jobs=-1 internamente.
+    # Descomenta la siguiente línea si quieres limitar cores en el host:
+    # cpus: "4"
+
+  # ---------------------------------------------------------------------------
+  # 4. Evaluación — threshold + métricas en test
+  #    Lee:    ieee13/detection/models/{RF,SVM,MLP}.pkl
+  #            data/splits/ieee13/det_{val,test}.csv
+  #    Genera: ieee13/detection/results/metrics_{RF,SVM,MLP}.json
+  #            ieee13/detection/results/decision_matrix.json
+  # ---------------------------------------------------------------------------
+  evaluate-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_evaluate_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python ieee13/detection/evaluate.py --config ieee13/config.yaml
+    depends_on:
+      train-ieee13:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 5. MCDM — AHP + Monte Carlo + dependability override → mejor modelo
+  #    Lee:    ieee13/detection/results/decision_matrix.json
+  #    Genera: ieee13/detection/results/mcdm_result.json
+  # ---------------------------------------------------------------------------
+  mcdm-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_mcdm_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python ieee13/detection/mcdm.py --config ieee13/config.yaml
+    depends_on:
+      evaluate-ieee13:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # 6. Inferencia — verificación sobre test set en modo simulación
+  #    Lee:    ieee13/detection/results/mcdm_result.json  (mejor modelo)
+  #            ieee13/detection/results/metrics_<id>.json (threshold óptimo)
+  #            ieee13/detection/models/<id>.pkl
+  #            data/processed/ieee13/scaler.pkl
+  #            data/splits/ieee13/det_test.csv
+  #    Genera: ieee13/detection/results/predictions_sim_det_test.csv
+  #            ieee13/detection/results/validation_sim_det_test.json
+  # ---------------------------------------------------------------------------
+  predict-ieee13:
+    build: .
+    image: smart-relay:latest
+    container_name: sr_predict_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+    command: >
+      python ieee13/detection/predict.py
+      --config ieee13/config.yaml
+      --mode sim
+      --input data/splits/ieee13/det_test.csv
+    depends_on:
+      mcdm-ieee13:
+        condition: service_completed_successfully
+    restart: "no"

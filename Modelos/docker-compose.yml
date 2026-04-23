@@ -1,0 +1,397 @@
+# =============================================================================
+# docker-compose.yml — Smart Relay Project
+# IEEE 5-bus  +  IEEE 13-bus  |  detection + classification
+#
+# PIPELINE 100% SECUENCIAL — un servicio a la vez
+#
+# Orden de ejecución:
+#
+#   PREPROCESAMIENTO (paralelo — no son intensivos en CPU)
+#     preprocess-ieee13  ──► split-ieee13 ──┐
+#     preprocess-ieee5   ──► split-ieee5  ──┘ (ambos splits deben terminar
+#                                              antes de arrancar los train)
+#
+#   ENTRENAMIENTO (secuencial)
+#     [1] train-det-ieee13
+#     [2] train-cls-ieee13   ←── [1]
+#     [3] train-det-ieee5    ←── [2]
+#     [4] train-cls-ieee5    ←── [3]
+#
+#   EVALUACIÓN → MCDM → PREDICCIÓN (secuencial, mismo orden)
+#     [5]  evaluate-det-ieee13  ←── [4]
+#     [6]  mcdm-det-ieee13      ←── [5]
+#     [7]  predict-det-ieee13   ←── [6]
+#     [8]  evaluate-cls-ieee13  ←── [7]
+#     [9]  mcdm-cls-ieee13      ←── [8]
+#     [10] predict-cls-ieee13   ←── [9]
+#     [11] evaluate-det-ieee5   ←── [10]
+#     [12] mcdm-det-ieee5       ←── [11]
+#     [13] predict-det-ieee5    ←── [12]
+#     [14] evaluate-cls-ieee5   ←── [13]
+#     [15] mcdm-cls-ieee5       ←── [14]
+#     [16] predict-cls-ieee5    ←── [15]
+#
+# =============================================================================
+# COMANDOS DE USO
+# =============================================================================
+#
+#   Pipeline completo:
+#     docker compose up --build      # primera vez
+#     docker compose up              # siguientes ejecuciones
+#
+#   Solo los 4 entrenamientos:
+#     docker compose up \
+#       preprocess-ieee13 split-ieee13 train-det-ieee13 train-cls-ieee13 \
+#       preprocess-ieee5  split-ieee5  train-det-ieee5  train-cls-ieee5
+#
+#   Solo evaluación (modelos ya entrenados):
+#     docker compose up \
+#       evaluate-det-ieee13 mcdm-det-ieee13 predict-det-ieee13 \
+#       evaluate-cls-ieee13 mcdm-cls-ieee13 predict-cls-ieee13 \
+#       evaluate-det-ieee5  mcdm-det-ieee5  predict-det-ieee5  \
+#       evaluate-cls-ieee5  mcdm-cls-ieee5  predict-cls-ieee5
+#
+#   Seguir un log en vivo desde el host:
+#     tail -f logs/train_det_ieee13.txt
+#
+#   Detener y limpiar contenedores:
+#     docker compose down
+#
+# =============================================================================
+# NOTAS
+# =============================================================================
+#
+#   restart: on-failure         — reintenta hasta 3 veces si el proceso falla
+#   stop_grace_period: 24h      — Docker espera 24h antes de forzar SIGKILL,
+#                                  evita interrumpir GridSearchCV largos
+#   tee /app/logs/<nombre>.txt  — guarda stdout+stderr en ./logs/ del host
+#                                  mientras sigue apareciendo en docker logs
+#   mkdir -p /app/logs          — crea el directorio si no existe
+#
+#   Requisitos previos:
+#     data/raw/ieee5.csv   debe existir antes de correr la cadena ieee5.
+#     data/raw/ieee13.csv  debe existir antes de correr la cadena ieee13.
+#
+#   GridSearchCV con n_jobs=-1:
+#     Al ser secuencial, solo un train corre a la vez — sin riesgo de
+#     saturar RAM por entrenamientos paralelos.
+#     Para limitar cores, descomentar la línea `cpus` en cada train-*.
+#
+# =============================================================================
+services:
+
+  # =========================
+  # PREPROCESAMIENTO IEEE 13
+  # =========================
+  preprocess-ieee13:
+    build: .
+    container_name: sr_preprocess_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u utils/preprocess.py --config ieee13/config.yaml 2>&1 | tee /app/logs/preprocess_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  split-ieee13:
+    build: .
+    container_name: sr_split_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u utils/split.py --config ieee13/config.yaml 2>&1 | tee /app/logs/split_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  # =========================
+  # PREPROCESAMIENTO IEEE 5
+  # =========================
+  preprocess-ieee5:
+    build: .
+    container_name: sr_preprocess_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u utils/preprocess.py --config ieee5/config.yaml 2>&1 | tee /app/logs/preprocess_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  split-ieee5:
+    build: .
+    container_name: sr_split_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u utils/split.py --config ieee5/config.yaml 2>&1 | tee /app/logs/split_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  # =========================
+  # TRAIN IEEE 13
+  # =========================
+  train-det-ieee13:
+    build: .
+    container_name: sr_train_det_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/detection/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_det_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  train-cls-ieee13:
+    build: .
+    container_name: sr_train_cls_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/classification/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_cls_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  # =========================
+  # TRAIN IEEE 5
+  # =========================
+  train-det-ieee5:
+    build: .
+    container_name: sr_train_det_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/detection/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_det_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  train-cls-ieee5:
+    build: .
+    container_name: sr_train_cls_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/classification/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_cls_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  # =========================
+  # EVALUATION + MCDM + PREDICTION
+  # =========================
+
+  evaluate-det-ieee13:
+    build: .
+    container_name: sr_evaluate_det_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/detection/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  mcdm-det-ieee13:
+    build: .
+    container_name: sr_mcdm_det_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/detection/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  predict-det-ieee13:
+    build: .
+    container_name: sr_predict_det_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/detection/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  evaluate-cls-ieee13:
+    build: .
+    container_name: sr_evaluate_cls_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/classification/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  mcdm-cls-ieee13:
+    build: .
+    container_name: sr_mcdm_cls_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/classification/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  predict-cls-ieee13:
+    build: .
+    container_name: sr_predict_cls_ieee13
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee13:/app/ieee13
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee13/classification/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee13.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  evaluate-det-ieee5:
+    build: .
+    container_name: sr_evaluate_det_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/detection/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  mcdm-det-ieee5:
+    build: .
+    container_name: sr_mcdm_det_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/detection/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  predict-det-ieee5:
+    build: .
+    container_name: sr_predict_det_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/detection/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  evaluate-cls-ieee5:
+    build: .
+    container_name: sr_evaluate_cls_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/classification/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  mcdm-cls-ieee5:
+    build: .
+    container_name: sr_mcdm_cls_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/classification/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h
+
+  predict-cls-ieee5:
+    build: .
+    container_name: sr_predict_cls_ieee5
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./ieee5:/app/ieee5
+      - ./logs:/app/logs
+    command: >
+      sh -c "set -o pipefail &&
+             mkdir -p /app/logs &&
+             python -u ieee5/classification/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee5.txt"
+    restart: on-failure
+    stop_grace_period: 24h

@@ -1,6 +1,5 @@
 # ── Data — never commit raw or generated datasets ──
 Modelos/data/
-**/data/raw/
 **/data/processed/
 **/data/splits/
 

@@ -1,0 +1,15 @@
+# ── Core ML ──
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+xgboost>=2.0
+
+# ── Serialization ──
+joblib>=1.3
+
+# ── Visualization ──
+matplotlib>=3.7
+seaborn>=0.12
+
+# ── Config ──
+pyyaml>=6.0

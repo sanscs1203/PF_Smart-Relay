@@ -45,15 +45,9 @@ DETECTION_LABEL_COL = "label_detection"
 # Multiclass label column name written to classif_data.csv
 CLASSIF_LABEL_COL = "label_classif"
 
-# Additional residual current columns for classification dataset
-RESIDUAL_CURRENT_COLS = ["Ir", "phi_Ir"]
-
-# Extended feature set for classification (12 original + 2 residual)
-CLASSIF_FEATURE_COLS = FEATURE_COLS + RESIDUAL_CURRENT_COLS
-
-# ---------------------------------------------------------------
+# ------------------------------------------------------------------
 # I/O Functions
-# ---------------------------------------------------------------
+# ------------------------------------------------------------------
 
 def load_config(config_path: str) -> dict:
     """Load a YAML configuration file.
@@ -163,53 +157,6 @@ def validate_dataframe(df: pd.DataFrame, config: dict) -> None:
 # Processing Functions
 # ---------------------------------------------------------------
 
-def compute_residual_current(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute the residual (zero-sequence) current from phase currents.
-    
-    The residual current is the phasor sum of the three phase currents:
-        Ir = Ia + Ib + Ic
-    
-    This function converts polar coordinates (magnitude, phase) to 
-    rectangular, performs the sum, and converts back to polar.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame containing Ia, Ib, Ic (magnitudes) and 
-        phi_Ia, phi_Ib, phi_Ic (phases in degrees).
-    
-    Returns
-    -------
-    pd.DataFrame
-        Original dataframe with two new columns: 'Ir' and 'phi_Ir'.
-    """
-    df = df.copy()
-    
-    # Convert phase angles from degrees to radians
-    phi_a_rad = np.deg2rad(df["phi_Ia"])
-    phi_b_rad = np.deg2rad(df["phi_Ib"])
-    phi_c_rad = np.deg2rad(df["phi_Ic"])
-    
-    # Convert polar to rectangular (real + imaginary)
-    Ia_real = df["Ia"] * np.cos(phi_a_rad)
-    Ia_imag = df["Ia"] * np.sin(phi_a_rad)
-    
-    Ib_real = df["Ib"] * np.cos(phi_b_rad)
-    Ib_imag = df["Ib"] * np.sin(phi_b_rad)
-    
-    Ic_real = df["Ic"] * np.cos(phi_c_rad)
-    Ic_imag = df["Ic"] * np.sin(phi_c_rad)
-    
-    # Phasor sum: Ir = Ia + Ib + Ic
-    Ir_real = Ia_real + Ib_real + Ic_real
-    Ir_imag = Ia_imag + Ib_imag + Ic_imag
-    
-    # Convert back to polar
-    df["Ir"] = np.sqrt(Ir_real**2 + Ir_imag**2)
-    df["phi_Ir"] = np.rad2deg(np.arctan2(Ir_imag, Ir_real))
-    
-    return df
-
 def build_detection_data(df: pd.DataFrame) -> pd.DataFrame:
     """Create the binary-labeled dataset for the detection module.
  
@@ -243,8 +190,8 @@ def build_classif_data(df: pd.DataFrame) -> pd.DataFrame:
     Only fault rows are included (Sin_Falla rows are excluded).
     The fault-type string is preserved as the label.
     
-    This dataset includes the 12 original features plus the computed
-    residual current (Ir magnitude and phi_Ir phase).
+    This dataset includes only the 12 original features (no residual
+    currents are computed).
  
     Parameters
     ----------
@@ -254,21 +201,18 @@ def build_classif_data(df: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        DataFrame with columns: [CLASSIF_FEATURE_COLS..., CLASSIF_LABEL_COL]
+        DataFrame with columns: [FEATURE_COLS..., CLASSIF_LABEL_COL]
         Only rows where Tipo_Falla != 'Sin_Falla'.
     """
     fault_mask = df["Tipo_Falla"] != NO_FAULT_LABEL
     cls = df.loc[fault_mask, FEATURE_COLS].copy()
-    
-    # Compute and add residual current columns
-    cls = compute_residual_current(cls)
     
     # Add classification label
     cls[CLASSIF_LABEL_COL] = df.loc[fault_mask, "Tipo_Falla"].values
     
     print(f"[classif]    Total rows (fault only): {len(cls):,}")
     print(f"             Unique fault types      : {cls[CLASSIF_LABEL_COL].nunique()}")
-    print(f"             Features                : {len(CLASSIF_FEATURE_COLS)} (12 original + 2 residual)")
+    print(f"             Features                : {len(FEATURE_COLS)} (original set)")
     return cls
 
 # ---------------------------------------------------------------

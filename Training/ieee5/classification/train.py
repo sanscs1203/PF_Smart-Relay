@@ -325,7 +325,7 @@ def train_model(
         cv          = cv,
         n_jobs      = -1,
         refit       = True,
-        verbose     = 2,
+        verbose     = 1,
         error_score = "raise",
     )
     y_fit = label_encoder.transform(y_train) if label_encoder is not None else y_train

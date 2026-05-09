@@ -59,9 +59,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u utils/preprocess.py --config ieee13/config.yaml 2>&1 | tee /app/logs/preprocess_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u utils/preprocess.py --config ieee13/config.yaml 2>&1 | tee /app/logs/preprocess_ieee13.txt"
     restart: on-failure
     stop_grace_period: 24h
 
@@ -74,9 +74,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u utils/split.py --config ieee13/config.yaml 2>&1 | tee /app/logs/split_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u utils/split.py --config ieee13/config.yaml 2>&1 | tee /app/logs/split_ieee13.txt"
     depends_on:
       preprocess-ieee13:
         condition: service_completed_successfully
@@ -92,9 +92,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u utils/preprocess.py --config ieee5/config.yaml 2>&1 | tee /app/logs/preprocess_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u utils/preprocess.py --config ieee5/config.yaml 2>&1 | tee /app/logs/preprocess_ieee5.txt"
     depends_on:
       split-ieee13:
         condition: service_completed_successfully
@@ -110,9 +110,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u utils/split.py --config ieee5/config.yaml 2>&1 | tee /app/logs/split_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u utils/split.py --config ieee5/config.yaml 2>&1 | tee /app/logs/split_ieee5.txt"
     depends_on:
       preprocess-ieee5:
         condition: service_completed_successfully
@@ -126,21 +126,16 @@ services:
   train-det-ieee13:
     build: .
     container_name: sr_train_det_ieee13
-    # For Jetson GPU acceleration uncomment the next line:
     # runtime: nvidia
-    # environment:
-    #   - NVIDIA_VISIBLE_DEVICES=all
-    # To limit CPU cores uncomment:
-    # cpus: '0-3'
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/detection/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_det_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/detection/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_det_ieee13.txt"
     depends_on:
       split-ieee5:
         condition: service_completed_successfully
@@ -157,9 +152,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/classification/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_cls_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/classification/train.py --config ieee13/config.yaml 2>&1 | tee /app/logs/train_cls_ieee13.txt"
     depends_on:
       train-det-ieee13:
         condition: service_completed_successfully
@@ -180,9 +175,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/detection/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_det_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/detection/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_det_ieee5.txt"
     depends_on:
       train-cls-ieee13:
         condition: service_completed_successfully
@@ -199,9 +194,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/classification/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_cls_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/classification/train.py --config ieee5/config.yaml 2>&1 | tee /app/logs/train_cls_ieee5.txt"
     depends_on:
       train-det-ieee5:
         condition: service_completed_successfully
@@ -221,9 +216,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/detection/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/detection/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee13.txt"
     depends_on:
       train-cls-ieee5:
         condition: service_completed_successfully
@@ -239,9 +234,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/detection/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/detection/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee13.txt"
     depends_on:
       evaluate-det-ieee13:
         condition: service_completed_successfully
@@ -257,9 +252,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/detection/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/detection/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee13.txt"
     depends_on:
       mcdm-det-ieee13:
         condition: service_completed_successfully
@@ -275,9 +270,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/classification/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/classification/evaluate.py --config ieee13/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee13.txt"
     depends_on:
       predict-det-ieee13:
         condition: service_completed_successfully
@@ -293,9 +288,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/classification/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/classification/mcdm.py --config ieee13/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee13.txt"
     depends_on:
       evaluate-cls-ieee13:
         condition: service_completed_successfully
@@ -311,9 +306,9 @@ services:
       - ./ieee13:/app/ieee13
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee13/classification/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee13.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee13/classification/predict.py --config ieee13/config.yaml --mode sim --input data/splits/ieee13/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee13.txt"
     depends_on:
       mcdm-cls-ieee13:
         condition: service_completed_successfully
@@ -333,9 +328,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/detection/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/detection/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_det_ieee5.txt"
     depends_on:
       predict-cls-ieee13:
         condition: service_completed_successfully
@@ -351,9 +346,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/detection/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/detection/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_det_ieee5.txt"
     depends_on:
       evaluate-det-ieee5:
         condition: service_completed_successfully
@@ -369,9 +364,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/detection/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/detection/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/det_test.csv 2>&1 | tee /app/logs/predict_det_ieee5.txt"
     depends_on:
       mcdm-det-ieee5:
         condition: service_completed_successfully
@@ -387,9 +382,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/classification/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/classification/evaluate.py --config ieee5/config.yaml 2>&1 | tee /app/logs/evaluate_cls_ieee5.txt"
     depends_on:
       predict-det-ieee5:
         condition: service_completed_successfully
@@ -405,9 +400,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/classification/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/classification/mcdm.py --config ieee5/config.yaml 2>&1 | tee /app/logs/mcdm_cls_ieee5.txt"
     depends_on:
       evaluate-cls-ieee5:
         condition: service_completed_successfully
@@ -423,9 +418,9 @@ services:
       - ./ieee5:/app/ieee5
       - ./logs:/app/logs
     command: >
-      sh -c "set -o pipefail &&
-             mkdir -p /app/logs &&
-             python -u ieee5/classification/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee5.txt"
+      bash -c "set -o pipefail &&
+               mkdir -p /app/logs &&
+               python3 -u ieee5/classification/predict.py --config ieee5/config.yaml --mode sim --input data/splits/ieee5/cls_test.csv 2>&1 | tee /app/logs/predict_cls_ieee5.txt"
     depends_on:
       mcdm-cls-ieee5:
         condition: service_completed_successfully

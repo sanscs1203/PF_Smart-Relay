@@ -344,7 +344,7 @@ def train_model(
         cv          = cv,
         n_jobs      = -1,
         refit       = True,
-        verbose     = 2,
+        verbose     = 1,
         error_score = "raise",
     )
     gs.fit(X_train, y_train)

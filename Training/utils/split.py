@@ -40,15 +40,12 @@ BASE_FEATURE_COLS = [
     "Va", "Vb", "Vc",
     "phi_Va", "phi_Vb", "phi_Vc",
     "Ia", "Ib", "Ic",
-    "phi_Ia", "phi_Ib", "phi_Ic",
+    "phi_Ia", "phi_Ib", "phi_Ic"
 ]
 
-# Additional features for classification (residual current)
-RESIDUAL_COLS = ["Ir", "phi_Ir"]
-
-# Detection uses 12 features; Classification uses 14
+# Detection uses 12 features
 DETECTION_FEATURE_COLS = BASE_FEATURE_COLS
-CLASSIF_FEATURE_COLS   = BASE_FEATURE_COLS + RESIDUAL_COLS
+CLASSIF_FEATURE_COLS   = BASE_FEATURE_COLS
 
 DETECTION_LABEL_COL = "label_detection"
 CLASSIF_LABEL_COL   = "label_classif"

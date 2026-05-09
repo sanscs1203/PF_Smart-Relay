@@ -26,12 +26,13 @@ import pandas as pd
 import yaml
 
 from pathlib import Path
+from typing import Dict, Tuple    # Python 3.6 compatible type hints
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-def load_config(config_path: str) -> dict:
+def load_config(config_path: str) -> Dict:
     """Load a YAML configuration file.
 
     Parameters
@@ -41,7 +42,7 @@ def load_config(config_path: str) -> dict:
 
     Returns
     -------
-    dict
+    Dict
         Parsed configuration dictionary.
 
     Raises
@@ -60,7 +61,7 @@ def load_config(config_path: str) -> dict:
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_split(csv_path: str, label_col: str) -> tuple[np.ndarray, np.ndarray]:
+def load_split(csv_path: str, label_col: str) -> Tuple[np.ndarray, np.ndarray]:
     """Load a split CSV and return (X, y) as numpy arrays.
 
     The CSV must follow the project standard format:
@@ -75,7 +76,7 @@ def load_split(csv_path: str, label_col: str) -> tuple[np.ndarray, np.ndarray]:
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
+    Tuple[np.ndarray, np.ndarray]
         Feature matrix X and label vector y.
 
     Raises
@@ -156,7 +157,7 @@ def verify_scaler(scaler_path: str) -> None:
 # AHP matrix reconstruction
 # ---------------------------------------------------------------------------
 
-def build_pairwise_matrix(pairwise_cfg: dict) -> np.ndarray:
+def build_pairwise_matrix(pairwise_cfg: Dict) -> np.ndarray:
     """Reconstruct the 2×2 AHP pairwise matrix from config.yaml values.
 
     The config stores only the three upper-triangle judgements:
@@ -173,7 +174,7 @@ def build_pairwise_matrix(pairwise_cfg: dict) -> np.ndarray:
 
     Parameters
     ----------
-    pairwise_cfg : dict
+    pairwise_cfg : Dict
         Sub-dict from config.yaml: detection.ahp.pairwise_matrix
         Expected keys: Recall_vs_Specificity.
 

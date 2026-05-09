@@ -1,4 +1,4 @@
-""" 
+"""
 monte_carlo.py
 
  Module: Monte Carlo robustness analysis
@@ -35,17 +35,18 @@ monte_carlo.py
  """
 
 import numpy as np
+from typing import List, Dict, Tuple
 
 
 def monte_carlo_robustness(
     decision_matrix: np.ndarray,
     w_combined:      np.ndarray,
-    metric_names:    list[str],
-    model_names:     list[str],
+    metric_names:    List[str],
+    model_names:     List[str],
     n_simulations:   int   = 1000,
     concentration:   float = 10.0,
     random_seed:     int   = 42,
-) -> dict:
+) -> Dict:
     """
     Assess the robustness of the MCDM ranking via Monte Carlo simulation.
 
@@ -71,10 +72,10 @@ def monte_carlo_robustness(
         Final combined weights from combined_weights() in shannon_entropy.py.
         These are the nominal weights that Monte Carlo will perturb.
 
-    metric_names : list of str
+    metric_names : List[str]
         Names of the criteria (columns).
 
-    model_names : list of str
+    model_names : List[str]
         Names of the alternatives (rows).
 
     n_simulations : int, default 1000
@@ -93,21 +94,21 @@ def monte_carlo_robustness(
 
     Returns
     -------
-    results : dict with keys:
-        'nominal_ranking'  : list[str]
+    results : Dict with keys:
+        'nominal_ranking'  : List[str]
             Model names ordered best → worst using w_combined.
         'nominal_scores'   : np.ndarray, shape (n_models,)
             WSM scores using w_combined (before perturbation).
-        'win_rates'        : dict[str, float]
+        'win_rates'        : Dict[str, float]
             Percentage of simulations each model ranked first.
         'stability_index'  : float
             Fraction of simulations where the full ranking matches
             the nominal ranking. Range [0, 1].
             ≥ 0.70 → robust decision.
             < 0.50 → ranking is sensitive to weight uncertainty.
-        'score_mean'       : dict[str, float]
+        'score_mean'       : Dict[str, float]
             Mean WSM score per model across all simulations.
-        'score_std'        : dict[str, float]
+        'score_std'        : Dict[str, float]
             Standard deviation of WSM score per model.
         'score_matrix'     : np.ndarray, shape (n_simulations, n_models)
             Full score matrix for custom post-processing or plotting.
@@ -230,16 +231,16 @@ def monte_carlo_robustness(
 # =============================================================================
 
 def _print_report(
-    nominal_ranking: list,
+    nominal_ranking: List[str],
     nominal_scores:  np.ndarray,
     nominal_order:   np.ndarray,
-    win_rates:       dict,
+    win_rates:       Dict[str, float],
     stability_index: float,
-    score_mean:      dict,
-    score_std:       dict,
+    score_mean:      Dict[str, float],
+    score_std:       Dict[str, float],
     n_simulations:   int,
     concentration:   float,
-    model_names:     list,
+    model_names:     List[str],
 ) -> None:
     """Print a formatted Monte Carlo robustness summary to stdout."""
 

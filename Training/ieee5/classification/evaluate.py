@@ -44,6 +44,7 @@ import json
 import sys
 import joblib
 from pathlib import Path
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 from sklearn.metrics import (
@@ -60,7 +61,7 @@ from utils.io import load_config, load_split, load_model   # shared I/O helpers
 # Metric computation
 # ---------------------------------------------------------------------------
 
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
     """Compute weighted recall and confusion matrix.
 
     Weighted recall accounts for class frequency, making it robust under
@@ -75,7 +76,7 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
     Returns
     -------
-    dict
+    Dict
         Keys: weighted_recall, confusion_matrix (as nested list),
               classes (as list).
     """
@@ -111,8 +112,8 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
 def save_metrics_json(
     model_id:     str,
-    val_metrics:  dict,
-    test_metrics: dict,
+    val_metrics:  Dict,
+    test_metrics: Dict,
     results_dir:  Path,
 ) -> None:
     """Save per-model metrics report as JSON.
@@ -128,8 +129,8 @@ def save_metrics_json(
     Parameters
     ----------
     model_id : str
-    val_metrics : dict
-    test_metrics : dict
+    val_metrics : Dict
+    test_metrics : Dict
     results_dir : Path
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -146,8 +147,8 @@ def save_metrics_json(
 
 def save_decision_matrix(
     decision_matrix: np.ndarray,
-    model_names:     list[str],
-    metric_names:    list[str],
+    model_names:     List[str],
+    metric_names:    List[str],
     results_dir:     Path,
 ) -> None:
     """Save the decision matrix for mcdm.py as JSON.
@@ -160,8 +161,8 @@ def save_decision_matrix(
     Parameters
     ----------
     decision_matrix : np.ndarray, shape (n_models, 1)
-    model_names : list[str]
-    metric_names : list[str]
+    model_names : List[str]
+    metric_names : List[str]
     results_dir : Path
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -182,14 +183,14 @@ def save_decision_matrix(
 
 def evaluate_model(
     model_key:   str,
-    cfg:         dict,
+    cfg:         Dict,
     X_val:       np.ndarray,
     y_val:       np.ndarray,
     X_test:      np.ndarray,
     y_test:      np.ndarray,
     models_dir:  Path,
     results_dir: Path,
-) -> dict:
+) -> Dict:
     """Full evaluation pipeline for one model.
 
     Steps
@@ -203,7 +204,7 @@ def evaluate_model(
     ----------
     model_key : str
         Key in config.yaml classification section.
-    cfg : dict
+    cfg : Dict
         Full parsed config dictionary.
     X_val, y_val : np.ndarray
         Validation features and labels.
@@ -216,7 +217,7 @@ def evaluate_model(
 
     Returns
     -------
-    dict
+    Dict
         Keys: model_id, val, test.
     """
     model_id = cfg["classification"][model_key]["model_id"]

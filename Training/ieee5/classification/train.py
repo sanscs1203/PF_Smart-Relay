@@ -43,6 +43,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -89,19 +90,19 @@ def build_weighted_recall_scorer() -> callable:
 # Model factory
 # ---------------------------------------------------------------------------
 
-def build_model(model_key: str, cfg: dict) -> tuple:
+def build_model(model_key: str, cfg: Dict) -> Tuple:
     """Instantiate a model and its param_grid from config.yaml.
 
     Parameters
     ----------
     model_key : str
         One of 'random_forest', 'xgboost', 'knn'.
-    cfg : dict
+    cfg : Dict
         Full parsed config dictionary.
 
     Returns
     -------
-    tuple[estimator, dict, str]
+    Tuple[estimator, Dict, str]
         (unfitted model, param_grid dict, model_id string)
     """
     model_cfg = cfg["classification"][model_key]
@@ -151,9 +152,9 @@ def overfitting_check(
     X_train:     np.ndarray,
     y_train:     np.ndarray,
     model_id:    str,
-    label_encoder: LabelEncoder | None = None,
+    label_encoder: Optional[LabelEncoder] = None,
     threshold:   float = 0.05,
-) -> dict:
+) -> Dict:
     """Compare train score vs best CV score to flag potential overfitting.
 
     Parameters
@@ -171,7 +172,7 @@ def overfitting_check(
 
     Returns
     -------
-    dict
+    Dict
         Keys: model_id, train_score, cv_score, gap, overfit_flag.
     """
     best_model  = grid_search.best_estimator_
@@ -246,12 +247,12 @@ def save_cv_results(grid_search: GridSearchCV,
     print(f"  [{model_id}] CV results saved → '{out}'")
 
 
-def save_overfit_report(records: list[dict], results_dir: Path) -> None:
+def save_overfit_report(records: List[Dict], results_dir: Path) -> None:
     """Save the overfitting check summary as JSON.
 
     Parameters
     ----------
-    records : list[dict]
+    records : List[Dict]
         One dict per model, output of overfitting_check().
     results_dir : Path
         Directory for result files.
@@ -269,22 +270,22 @@ def save_overfit_report(records: list[dict], results_dir: Path) -> None:
 
 def train_model(
     model_key:   str,
-    cfg:         dict,
+    cfg:         Dict,
     X_train:     np.ndarray,
     y_train:     np.ndarray,
     scorer:      callable,
     cv:          StratifiedKFold,
     models_dir:  Path,
     results_dir: Path,
-    label_encoder: LabelEncoder | None = None,
-) -> tuple[GridSearchCV, dict]:
+    label_encoder: Optional[LabelEncoder] = None,
+) -> Tuple[GridSearchCV, Dict]:
     """Run GridSearchCV for one model and persist outputs.
 
     Parameters
     ----------
     model_key : str
         Key in config.yaml classification section.
-    cfg : dict
+    cfg : Dict
         Full parsed config dictionary.
     X_train : np.ndarray
         Training feature matrix (already scaled).
@@ -301,7 +302,7 @@ def train_model(
 
     Returns
     -------
-    tuple[GridSearchCV, dict]
+    Tuple[GridSearchCV, Dict]
         Fitted GridSearchCV and overfitting check dict.
     """
     model, grid, model_id = build_model(model_key, cfg)

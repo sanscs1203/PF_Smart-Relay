@@ -13,6 +13,7 @@ Standard: IEEE C37.100 / IEC 60255 (metric interpretation)
 """
 
 import numpy as np
+from typing import List, Tuple
 
 # Random Index table — Saaty (1980), up to n = 10
 _RI_TABLE = {
@@ -21,7 +22,7 @@ _RI_TABLE = {
     9: 1.45, 10: 1.49,
 }
 
-def ahp_weights(matrix: np.array, metric_names: list[str]) -> tuple[np.ndarray, float]:
+def ahp_weights(matrix: np.ndarray, metric_names: List[str]) -> Tuple[np.ndarray, float]:
     """
     Compute AHP priority weights and Consistency Ratio (CR) from a
     pairwise comparison matrix expressed on the Saaty 1–9 scale.
@@ -42,7 +43,7 @@ def ahp_weights(matrix: np.array, metric_names: list[str]) -> tuple[np.ndarray, 
         over criterion j" on Saaty's scale (1 = equal, 9 = extreme).
         The matrix must satisfy: matrix[j, i] = 1 / matrix[i, j].
  
-    metric_names : list of str
+    metric_names : List[str]
         Names of the n criteria, in the same order as the matrix rows/columns.
  
     Returns
@@ -102,7 +103,7 @@ def ahp_weights(matrix: np.array, metric_names: list[str]) -> tuple[np.ndarray, 
 # =============================================================================
 
 def report(matrix: np.ndarray, 
-           metric_names: list[str], 
+           metric_names: List[str], 
            lambda_max: float, 
            weights: np.ndarray,
            CI: float, 

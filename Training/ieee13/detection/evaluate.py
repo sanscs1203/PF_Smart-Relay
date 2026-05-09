@@ -46,6 +46,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
 from sklearn.metrics import (
@@ -72,7 +73,7 @@ def compute_metrics(
     y_true:  np.ndarray,
     y_pred:  np.ndarray,
     weights: np.ndarray,
-) -> dict:
+) -> Dict:
     """Compute Recall, Specificity and AHP composite score.
 
     Parameters
@@ -87,7 +88,7 @@ def compute_metrics(
 
     Returns
     -------
-    dict
+    Dict
         Keys: recall, specificity, roc_you, ahp_score,
               confusion_matrix (as nested list).
     """
@@ -136,9 +137,9 @@ def optimise_threshold(
     X_val:    np.ndarray,
     y_val:    np.ndarray,
     weights:  np.ndarray,
-    thr_cfg:  dict,
+    thr_cfg:  Dict,
     model_id: str,
-) -> tuple[float, dict]:
+) -> Tuple[float, Dict]:
     """Sweep thresholds on the val set and return the optimal one.
  
     Selection strategy (two-stage):
@@ -161,14 +162,14 @@ def optimise_threshold(
     y_val : np.ndarray
     weights : np.ndarray
         AHP priority vector [w_recall, w_specificity].
-    thr_cfg : dict
+    thr_cfg : Dict
         Threshold config sub-dict from config.yaml.
     model_id : str
         Short identifier for logging.
  
     Returns
     -------
-    tuple[float, dict]
+    Tuple[float, Dict]
         (optimal_threshold, val_metrics_at_optimal_threshold)
     """
     thresholds = np.linspace(
@@ -234,8 +235,8 @@ def optimise_threshold(
 def save_metrics_json(
     model_id:     str,
     threshold:    float,
-    val_metrics:  dict,
-    test_metrics: dict,
+    val_metrics:  Dict,
+    test_metrics: Dict,
     results_dir:  Path,
 ) -> None:
     """Save per-model metrics report as JSON.
@@ -253,8 +254,8 @@ def save_metrics_json(
     ----------
     model_id : str
     threshold : float
-    val_metrics : dict
-    test_metrics : dict
+    val_metrics : Dict
+    test_metrics : Dict
     results_dir : Path
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -272,8 +273,8 @@ def save_metrics_json(
 
 def save_decision_matrix(
     decision_matrix: np.ndarray,
-    model_names:     list[str],
-    metric_names:    list[str],
+    model_names:     List[str],
+    metric_names:    List[str],
     results_dir:     Path,
 ) -> None:
     """Save the decision matrix for mcdm.py as JSON.
@@ -285,8 +286,8 @@ def save_decision_matrix(
     Parameters
     ----------
     decision_matrix : np.ndarray, shape (n_models, n_metrics)
-    model_names : list[str]
-    metric_names : list[str]
+    model_names : List[str]
+    metric_names : List[str]
     results_dir : Path
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -307,7 +308,7 @@ def save_decision_matrix(
 
 def evaluate_model(
     model_key:   str,
-    cfg:         dict,
+    cfg:         Dict,
     X_val:       np.ndarray,
     y_val:       np.ndarray,
     X_test:      np.ndarray,
@@ -315,7 +316,7 @@ def evaluate_model(
     weights:     np.ndarray,
     models_dir:  Path,
     results_dir: Path,
-) -> dict:
+) -> Dict:
     """Full evaluation pipeline for one model.
 
     Steps
@@ -328,7 +329,7 @@ def evaluate_model(
     Parameters
     ----------
     model_key : str
-    cfg : dict
+    cfg : Dict
     X_val, y_val : np.ndarray
     X_test, y_test : np.ndarray
     weights : np.ndarray
@@ -337,7 +338,7 @@ def evaluate_model(
 
     Returns
     -------
-    dict
+    Dict
         Keys: model_id, threshold, val, test.
     """
     model_id = cfg["detection"][model_key]["model_id"]

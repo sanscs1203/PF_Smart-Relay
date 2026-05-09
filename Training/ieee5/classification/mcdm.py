@@ -55,6 +55,7 @@ import sys
 import warnings
 import joblib
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -73,7 +74,7 @@ warnings.filterwarnings("ignore")
 # Decision matrix loader
 # ---------------------------------------------------------------------------
 
-def load_decision_matrix(results_dir: Path) -> tuple[np.ndarray, list[str], list[str]]:
+def load_decision_matrix(results_dir: Path) -> Tuple[np.ndarray, List[str], List[str]]:
     """Load the decision matrix produced by evaluate.py.
 
     Parameters
@@ -83,7 +84,7 @@ def load_decision_matrix(results_dir: Path) -> tuple[np.ndarray, list[str], list
 
     Returns
     -------
-    tuple[np.ndarray, list[str], list[str]]
+    Tuple[np.ndarray, List[str], List[str]]
         (decision_matrix, model_names, metric_names)
 
     Raises
@@ -154,14 +155,14 @@ def _refit_model(
 
 
 def monte_carlo_cls_robustness(
-    cfg:          dict,
-    model_keys:   list[str],
-    model_names:  list[str],
+    cfg:          Dict,
+    model_keys:   List[str],
+    model_names:  List[str],
     X_train:      np.ndarray,
     y_train:      np.ndarray,
     X_test:       np.ndarray,
     y_test:       np.ndarray,
-) -> dict:
+) -> Dict:
     """Assess ranking robustness by subsampling the training dataset.
 
     In each simulation, cls_train is subsampled at subsample_rate,
@@ -178,11 +179,11 @@ def monte_carlo_cls_robustness(
 
     Parameters
     ----------
-    cfg : dict
+    cfg : Dict
         Full parsed config dictionary.
-    model_keys : list[str]
+    model_keys : List[str]
         Keys in the classification section of config.yaml.
-    model_names : list[str]
+    model_names : List[str]
         Short model identifiers in the same order as model_keys.
     X_train : np.ndarray
         Full cls_train feature matrix.
@@ -195,7 +196,7 @@ def monte_carlo_cls_robustness(
 
     Returns
     -------
-    dict
+    Dict
         Keys: nominal_ranking, nominal_scores, win_rates,
               stability_index, score_mean, score_std, score_matrix.
     """
@@ -322,16 +323,16 @@ def monte_carlo_cls_robustness(
 
 
 def _print_mc_report(
-    nominal_ranking: list[str],
+    nominal_ranking: List[str],
     nominal_scores:  np.ndarray,
     nominal_order:   np.ndarray,
-    win_rates:       dict,
+    win_rates:       Dict[str, float],
     stability_index: float,
-    score_mean:      dict,
-    score_std:       dict,
+    score_mean:      Dict[str, float],
+    score_std:       Dict[str, float],
     n_simulations:   int,
     subsample_rate:  float,
-    model_names:     list[str],
+    model_names:     List[str],
 ) -> None:
     """Print a formatted Monte Carlo robustness summary to stdout."""
     sep = "=" * 62
@@ -380,8 +381,8 @@ def _print_mc_report(
 # ---------------------------------------------------------------------------
 
 def save_mcdm_result(
-    mc_results:       dict,
-    model_names:      list[str],
+    mc_results:       Dict,
+    model_names:      List[str],
     best_model:       str,
     selection_reason: str,
     results_dir:      Path,
@@ -390,9 +391,9 @@ def save_mcdm_result(
 
     Parameters
     ----------
-    mc_results : dict
+    mc_results : Dict
         Output of monte_carlo_cls_robustness().
-    model_names : list[str]
+    model_names : List[str]
     best_model : str
         Final selected model.
     selection_reason : str

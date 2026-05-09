@@ -50,6 +50,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -84,7 +85,7 @@ DETECTION_LABEL_COL = "label_detection"
 
 def load_input_csv(
     csv_path: str,
-) -> tuple[pd.DataFrame, np.ndarray, np.ndarray | None]:
+) -> Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]:
     """Load an input CSV and separate features from label (if present).
 
     The CSV must contain the 12 electrical feature columns. The label
@@ -98,7 +99,7 @@ def load_input_csv(
 
     Returns
     -------
-    tuple[pd.DataFrame, np.ndarray, np.ndarray | None]
+    Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]
         (original dataframe, feature matrix X, label vector y or None)
 
     Raises
@@ -164,7 +165,7 @@ def load_scaler(scaler_path: str):
     return scaler
 
 
-def load_best_model_id(results_dir: Path) -> str:
+def load_best_model_id(results_dir: Path) -> Tuple[str, np.ndarray]:
     """Read the best model identifier from mcdm_result.json.
 
     Parameters
@@ -174,8 +175,8 @@ def load_best_model_id(results_dir: Path) -> str:
 
     Returns
     -------
-    str
-        Model identifier (e.g. 'RF', 'SVM', 'MLP').
+    Tuple[str, np.ndarray]
+        (best model identifier, AHP weight vector)
 
     Raises
     ------
@@ -239,7 +240,7 @@ def predict(
     model,
     X_scaled:  np.ndarray,
     threshold: float,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Run inference and apply the optimal decision threshold.
 
     Parameters
@@ -252,7 +253,7 @@ def predict(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
+    Tuple[np.ndarray, np.ndarray]
         (predicted labels, positive-class probabilities)
     """
     if hasattr(model, "predict_proba"):
@@ -274,7 +275,7 @@ def compute_metrics(
     y_pred: np.ndarray,
     y_prob: np.ndarray,
     weights:  np.ndarray,
-) -> dict:
+) -> Dict:
     """Compute detection metrics against ground-truth labels.
 
     Parameters
@@ -288,7 +289,7 @@ def compute_metrics(
 
     Returns
     -------
-    dict
+    Dict
         recall, specificity, ahp_score, confusion_matrix.
     """
     recall      = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
@@ -340,7 +341,7 @@ def save_validation_report(
     mode:      str,
     model_id:  str,
     threshold: float,
-    metrics:   dict | None,
+    metrics:   Optional[Dict],
     n_samples: int,
     out_path:  Path,
 ) -> None:
@@ -352,7 +353,7 @@ def save_validation_report(
         'sim' or 'lab'.
     model_id : str
     threshold : float
-    metrics : dict or None
+    metrics : Optional[Dict]
         None if no labels were available.
     n_samples : int
     out_path : Path

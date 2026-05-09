@@ -48,6 +48,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import joblib as _jl
 import numpy as np
@@ -80,7 +81,7 @@ CLASSIFICATION_LABEL_COL = "label_classif"
 
 def load_input_csv(
     csv_path: str,
-) -> tuple[pd.DataFrame, np.ndarray, np.ndarray | None]:
+) -> Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]:
     """Load an input CSV and separate features from label (if present).
 
     The CSV must contain the 12 electrical feature columns. The label
@@ -94,7 +95,7 @@ def load_input_csv(
 
     Returns
     -------
-    tuple[pd.DataFrame, np.ndarray, np.ndarray | None]
+    Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]
         (original dataframe, feature matrix X, label vector y or None)
 
     Raises
@@ -153,7 +154,7 @@ def load_scaler(scaler_path: str):
             f"Scaler not found: '{path}'\n"
             "Run utils/split.py first."
         )
-    scaler = joblib.load(path)
+    scaler = _jl.load(path)
     print(f"[scaler] Loaded from '{path}'")
     return scaler
 
@@ -197,7 +198,7 @@ def load_best_model_id(results_dir: Path) -> str:
 def compute_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-) -> dict:
+) -> Dict:
     """Compute weighted recall, per-class recall and confusion matrix.
 
     Parameters
@@ -209,7 +210,7 @@ def compute_metrics(
 
     Returns
     -------
-    dict
+    Dict
         weighted_recall, per_class_recall, confusion_matrix, classes.
     """
     classes = sorted(np.unique(np.concatenate([y_true, y_pred])))
@@ -266,7 +267,7 @@ def save_predictions_csv(
 def save_validation_report(
     mode:      str,
     model_id:  str,
-    metrics:   dict | None,
+    metrics:   Optional[Dict],
     n_samples: int,
     out_path:  Path,
 ) -> None:
@@ -277,7 +278,7 @@ def save_validation_report(
     mode : str
         'sim' or 'lab'.
     model_id : str
-    metrics : dict or None
+    metrics : Dict or None
         None if no labels were available.
     n_samples : int
     out_path : Path

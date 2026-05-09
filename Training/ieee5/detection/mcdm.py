@@ -35,6 +35,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -49,7 +50,7 @@ from utils.monte_carlo import monte_carlo_robustness
 # Decision matrix loader
 # ---------------------------------------------------------------------------
 
-def load_decision_matrix(results_dir: Path) -> tuple[np.ndarray, list[str], list[str]]:
+def load_decision_matrix(results_dir: Path) -> Tuple[np.ndarray, List[str], List[str]]:
     """Load the decision matrix produced by evaluate.py.
 
     Parameters
@@ -59,7 +60,7 @@ def load_decision_matrix(results_dir: Path) -> tuple[np.ndarray, list[str], list
 
     Returns
     -------
-    tuple[np.ndarray, list[str], list[str]]
+    Tuple[np.ndarray, List[str], List[str]]
         (decision_matrix, model_names, metric_names)
 
     Raises
@@ -92,11 +93,11 @@ def load_decision_matrix(results_dir: Path) -> tuple[np.ndarray, list[str], list
  
 def dependability_override(
     decision_matrix: np.ndarray,
-    model_names:     list[str],
-    metric_names:    list[str],
+    model_names:     List[str],
+    metric_names:    List[str],
     nominal_winner:  str,
     spec_margin:     float,
-) -> tuple[str, bool, str]:
+) -> Tuple[str, bool, str]:
     """Check if a model dominates the nominal winner on dependability.
  
     A model A dominates the nominal winner B if:
@@ -110,9 +111,9 @@ def dependability_override(
     ----------
     decision_matrix : np.ndarray, shape (n_models, 2)
         Columns: Recall, Specificity (test-set scores).
-    model_names : list[str]
+    model_names : List[str]
         Model identifiers in the same row order as decision_matrix.
-    metric_names : list[str]
+    metric_names : List[str]
         Must contain 'Recall' and 'Specificity'.
     nominal_winner : str
         Model selected by the AHP + Monte Carlo ranking.
@@ -122,7 +123,7 @@ def dependability_override(
  
     Returns
     -------
-    tuple[str, bool, str]
+    Tuple[str, bool, str]
         (best_model, override_applied, reason)
     """
     recall_idx = metric_names.index("Recall")
@@ -170,9 +171,9 @@ def dependability_override(
 
 def save_mcdm_result(
     w_ahp:           np.ndarray,
-    mc_results:      dict,
-    metric_names:    list[str],
-    model_names:     list[str],
+    mc_results:      Dict,
+    metric_names:    List[str],
+    model_names:     List[str],
     best_model:      str,
     override:        bool,
     override_reason: str,
@@ -184,10 +185,10 @@ def save_mcdm_result(
     ----------
     w_ahp : np.ndarray
         AHP weights used for model selection.
-    mc_results : dict
+    mc_results : Dict
         Output of monte_carlo_robustness().
-    metric_names : list[str]
-    model_names : list[str]
+    metric_names : List[str]
+    model_names : List[str]
     best_model : str
         Final selected model (may differ from nominal winner if override).
     override : bool

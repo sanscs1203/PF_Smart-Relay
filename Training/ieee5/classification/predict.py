@@ -68,8 +68,7 @@ FEATURE_COLS = [
     "Va", "Vb", "Vc",
     "phi_Va", "phi_Vb", "phi_Vc",
     "Ia", "Ib", "Ic",
-    "phi_Ia", "phi_Ib", "phi_Ic",
-    "Ir", "phi_Ir",
+    "phi_Ia", "phi_Ib", "phi_Ic"
 ]
 
 CLASSIFICATION_LABEL_COL = "label_classif"

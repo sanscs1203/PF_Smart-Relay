@@ -1,0 +1,25 @@
+
+============================================================
+  Detection — predict  [IEEE 5-Bus]  mode=sim
+============================================================
+
+[mcdm]  Best model from mcdm_result.json: 'MLP'
+[threshold] Optimal threshold for MLP: 0.24
+[load]  Model 'MLP' loaded from 'ieee5/detection/models/MLP.pkl'
+[load]  'det_test.csv'  →  5,223 samples  (labels present: fault=88.2%  no-fault=11.8%)
+[scaler] Applied to 5,223 samples
+[predict] fault=4609  no-fault=614  (threshold=0.24)
+
+  Metrics vs ground truth:
+  recall      = 1.0000
+  specificity = 0.9984
+  ahp_score   = 0.9996
+  confusion matrix:
+    TN=614  FP=1
+    FN=0  TP=4608
+[save]  Predictions saved → 'ieee5/detection/results/predictions_sim_det_test.csv'
+[save]  Validation report saved → 'ieee5/detection/results/validation_sim_det_test.json'
+
+[done]  Prediction complete for IEEE 5-Bus  (mode=sim).
+        Results → 'ieee5/detection/results'
+

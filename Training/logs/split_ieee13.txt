@@ -1,0 +1,32 @@
+============================================================
+  Split pipeline — IEEE 13-BUS
+  Ratios: 70/15/15  |  seed=42
+============================================================
+
+--- DET module  (label_detection) ---
+[load]  'detection_data.csv'  →  66,832 rows, 12 features
+  Train:  46,782  (70.0%)  |  fault=85.0%  no-fault=15.0%
+  Val  :  10,025  (15.0%)  |  fault=85.0%  no-fault=15.0%
+  Test :  10,025  (15.0%)  |  fault=85.0%  no-fault=15.0%
+[scaler] fitted on train set and saved to 'data/processed/ieee13/det_scaler.pkl'
+[save]  Writing split files...
+  → saved   46,782 rows  'data/splits/ieee13/det_train.csv'
+  → saved   10,025 rows  'data/splits/ieee13/det_val.csv'
+  → saved   10,025 rows  'data/splits/ieee13/det_test.csv'
+
+--- CLS module  (label_classif) ---
+[load]  'classif_data.csv'  →  56,832 rows, 12 features
+  Train:  39,782  (70.0%)
+  Val  :   8,525  (15.0%)
+  Test :   8,525  (15.0%)
+[scaler] fitted on train set and saved to 'data/processed/ieee13/cls_scaler.pkl'
+[save]  Writing split files...
+  → saved   39,782 rows  'data/splits/ieee13/cls_train.csv'
+  → saved    8,525 rows  'data/splits/ieee13/cls_val.csv'
+  → saved    8,525 rows  'data/splits/ieee13/cls_test.csv'
+
+[done]  Split pipeline complete for IEEE 13-BUS.
+        Splits saved to: 'data/splits/ieee13'
+        Detection scaler: 'data/processed/ieee13/det_scaler.pkl'
+        Classification scaler: 'data/processed/ieee13/cls_scaler.pkl'
+

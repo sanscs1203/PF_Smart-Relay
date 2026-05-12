@@ -1,0 +1,68 @@
+
+============================================================
+  Detection — evaluation pipeline  [IEEE 13-Bus]
+============================================================
+
+[load]  'det_val.csv'  →  10,025 samples, 12 features
+[load]  'det_test.csv'  →  10,025 samples, 12 features
+============================================================
+AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
+============================================================
+
+  Pairwise Comparison Matrix:
+
+                      Recall Specificity
+  Recall              1.0000      3.0000
+  Specificity         0.3333      1.0000
+
+  Principal Eigenvalue (λ_max): 2.0000
+  Consistency Index (CI):       0.0000
+  Random Index (RI):            0.0000
+  Consistency Ratio (CR):       0.0000
+  Status: ✅ CONSISTENT (CR < 0.10)
+
+  Priority Weights:
+  --------------------------------------------
+  Recall         : 0.750000  ██████████████████████████████
+  Specificity    : 0.250000  ██████████
+  --------------------------------------------
+  Sum            : 1.000000
+
+[load]  Model 'RF' loaded from 'ieee13/detection/models/RF.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : RF
+────────────────────────────────────────────────────────────
+  [RF] Optimal threshold : 0.19  |  ahp_ref=0.9998  (recall=1.0000  spec=0.9993  ahp=0.9998)
+  [RF] Test  → recall=1.0000  spec=1.0000  ahp=1.0000
+  [RF] Metrics saved → 'ieee13/detection/results/metrics_RF.json'
+[load]  Model 'SVM' loaded from 'ieee13/detection/models/SVM.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : SVM
+────────────────────────────────────────────────────────────
+  [SVM] Optimal threshold : 0.44  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
+  [SVM] Test  → recall=1.0000  spec=0.9987  ahp=0.9997
+  [SVM] Metrics saved → 'ieee13/detection/results/metrics_SVM.json'
+[load]  Model 'MLP' loaded from 'ieee13/detection/models/MLP.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : MLP
+────────────────────────────────────────────────────────────
+  [MLP] Optimal threshold : 0.10  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
+  [MLP] Test  → recall=1.0000  spec=0.9993  ahp=0.9998
+  [MLP] Metrics saved → 'ieee13/detection/results/metrics_MLP.json'
+
+============================================================
+  Test set summary
+============================================================
+  Model     Threshold     Recall       Spec         AHP
+  ----------------------------------------------------------
+  RF             0.19     1.0000     1.0000     1.0000
+  SVM            0.44     1.0000     0.9987     0.9997
+  MLP            0.10     1.0000     0.9993     0.9998
+[decision matrix] Saved → 'ieee13/detection/results/decision_matrix.json'
+
+[done]  Evaluation complete for IEEE 13-Bus.
+        Results → 'ieee13/detection/results'
+

@@ -1,0 +1,42 @@
+
+============================================================
+  Classification — predict  [IEEE 13-Bus]  mode=sim
+============================================================
+
+[mcdm]  Best model from mcdm_result.json: 'KNN'
+[load]  Model 'KNN' loaded from 'ieee13/classification/models/KNN.pkl'
+[load]  'cls_test.csv'  →  8,525 samples  (labels present: 10 fault types)
+[scaler] Skipped — sim input is already scaled
+
+[predict] 8,525 samples classified:
+  L A             921  (10.8%)
+  L B             921  (10.8%)
+  L C            1152  (13.5%)
+  LL AB           691  (8.1%)
+  LL BC           922  (10.8%)
+  LL CA           807  (9.5%)
+  LLG AB          692  (8.1%)
+  LLG BC          921  (10.8%)
+  LLG CA          807  (9.5%)
+  LLL ABC         691  (8.1%)
+
+  Metrics vs ground truth:
+  weighted_recall = 1.0000
+
+  Per-class recall:
+    L A           1.0000
+    L B           1.0000
+    L C           1.0000
+    LL AB         1.0000
+    LL BC         1.0000
+    LL CA         1.0000
+    LLG AB        1.0000
+    LLG BC        1.0000
+    LLG CA        1.0000
+    LLL ABC       1.0000
+[save]  Predictions saved → 'ieee13/classification/results/predictions_sim_cls_test.csv'
+[save]  Validation report saved → 'ieee13/classification/results/validation_sim_cls_test.json'
+
+[done]  Prediction complete for IEEE 13-Bus  (mode=sim).
+        Results → 'ieee13/classification/results'
+

@@ -1,0 +1,85 @@
+
+==============================================================
+  Detection — MCDM pipeline  [IEEE 13-Bus]
+==============================================================
+
+[load]  Decision matrix loaded from 'ieee13/detection/results/decision_matrix.json'
+        Models  : ['RF', 'SVM', 'MLP']
+        Metrics : ['Recall', 'Specificity']
+        Shape   : (3, 2)
+
+──────────────────────────────────────────────────────────────
+  Step 1 — AHP weights  (Recall, Specificity)
+──────────────────────────────────────────────────────────────
+============================================================
+AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
+============================================================
+
+  Pairwise Comparison Matrix:
+
+                      Recall Specificity
+  Recall              1.0000      3.0000
+  Specificity         0.3333      1.0000
+
+  Principal Eigenvalue (λ_max): 2.0000
+  Consistency Index (CI):       0.0000
+  Random Index (RI):            0.0000
+  Consistency Ratio (CR):       0.0000
+  Status: ✅ CONSISTENT (CR < 0.10)
+
+  Priority Weights:
+  --------------------------------------------
+  Recall         : 0.750000  ██████████████████████████████
+  Specificity    : 0.250000  ██████████
+  --------------------------------------------
+  Sum            : 1.000000
+
+
+──────────────────────────────────────────────────────────────
+  Step 2 — Monte Carlo robustness analysis
+──────────────────────────────────────────────────────────────
+==============================================================
+  MONTE CARLO ROBUSTNESS ANALYSIS
+  Simulations : 1,000   Concentration : 10.0
+==============================================================
+
+  Nominal ranking (w_combined, no perturbation):
+  --------------------------------------------------
+  #1  RF          score = 0.333389  ████████████████████
+  #2  MLP         score = 0.333333  ███████████████████
+  #3  SVM         score = 0.333278  ███████████████████
+
+  Win rate per model (1,000 simulations):
+  --------------------------------------------------
+  RF          100.00%  ██████████████████████████████████████████████████
+  MLP           0.00%  
+  SVM           0.00%  
+
+  Score statistics (mean ± std):
+  --------------------------------------------------
+  RF          0.333389 ± 0.000029
+  MLP         0.333333 ± 0.000000
+  SVM         0.333277 ± 0.000029
+
+  Stability index : 1.0000  (100.0% of simulations)
+  Verdict         : ✅  ROBUST   — ranking stable under weight uncertainty
+
+
+──────────────────────────────────────────────────────────────
+  Step 3 — Dependability override  (spec_margin=0.05)
+──────────────────────────────────────────────────────────────
+  Nominal winner : RF
+  Override       : ❌ NO
+  Reason         : No model dominates RF under spec_margin=0.05. Nominal winner retained.
+
+==============================================================
+  Best model    : RF
+  Stability     : 1.0000  (ROBUST)
+  Win rate      : 100.0%
+==============================================================
+
+[save]  MCDM result saved → 'ieee13/detection/results/mcdm_result.json'
+
+[done]  MCDM pipeline complete for IEEE 13-Bus.
+        Results → 'ieee13/detection/results'
+

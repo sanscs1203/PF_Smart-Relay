@@ -5,3 +5,4 @@ matplotlib==3.3.4
 scikit-learn==0.24.2
 joblib==1.1.1
 pyyaml
+xgboost==1.5.2

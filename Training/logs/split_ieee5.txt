@@ -1,0 +1,32 @@
+============================================================
+  Split pipeline — IEEE 5-BUS
+  Ratios: 70/15/15  |  seed=42
+============================================================
+
+--- DET module  (label_detection) ---
+[load]  'detection_data.csv'  →  34,816 rows, 12 features
+  Train:  24,371  (70.0%)  |  fault=88.2%  no-fault=11.8%
+  Val  :   5,222  (15.0%)  |  fault=88.2%  no-fault=11.8%
+  Test :   5,223  (15.0%)  |  fault=88.2%  no-fault=11.8%
+[scaler] fitted on train set and saved to 'data/processed/ieee5/det_scaler.pkl'
+[save]  Writing split files...
+  → saved   24,371 rows  'data/splits/ieee5/det_train.csv'
+  → saved    5,222 rows  'data/splits/ieee5/det_val.csv'
+  → saved    5,223 rows  'data/splits/ieee5/det_test.csv'
+
+--- CLS module  (label_classif) ---
+[load]  'classif_data.csv'  →  30,720 rows, 12 features
+  Train:  21,503  (70.0%)
+  Val  :   4,608  (15.0%)
+  Test :   4,609  (15.0%)
+[scaler] fitted on train set and saved to 'data/processed/ieee5/cls_scaler.pkl'
+[save]  Writing split files...
+  → saved   21,503 rows  'data/splits/ieee5/cls_train.csv'
+  → saved    4,608 rows  'data/splits/ieee5/cls_val.csv'
+  → saved    4,609 rows  'data/splits/ieee5/cls_test.csv'
+
+[done]  Split pipeline complete for IEEE 5-BUS.
+        Splits saved to: 'data/splits/ieee5'
+        Detection scaler: 'data/processed/ieee5/det_scaler.pkl'
+        Classification scaler: 'data/processed/ieee5/cls_scaler.pkl'
+

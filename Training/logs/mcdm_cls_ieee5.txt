@@ -1,0 +1,44 @@
+
+==============================================================
+  Classification — MCDM pipeline  [IEEE 5-Bus]
+==============================================================
+
+[load]  Decision matrix loaded from 'ieee5/classification/results/decision_matrix.json'
+        Models  : ['RF', 'XGB', 'KNN']
+        Metrics : ['weighted_recall']
+        Shape   : (3, 1)
+[load]  'cls_train.csv'  →  21,503 samples, 12 features
+[load]  'cls_test.csv'  →  4,609 samples, 12 features
+
+──────────────────────────────────────────────────────────────
+  Step 1 — Nominal winner  (weighted recall on test set)
+──────────────────────────────────────────────────────────────
+  RF        weighted_recall = 1.000000  ←  nominal winner
+  XGB       weighted_recall = 0.999783
+  KNN       weighted_recall = 0.999783
+
+──────────────────────────────────────────────────────────────
+  Step 2 — Monte Carlo robustness  (dataset perturbation)
+──────────────────────────────────────────────────────────────
+[load]  Model 'RF' loaded from 'ieee5/classification/models/RF.pkl'
+[load]  Model 'XGB' loaded from 'ieee5/classification/models/XGB.pkl'
+[load]  Model 'KNN' loaded from 'ieee5/classification/models/KNN.pkl'
+[load]  Model 'RF' loaded from 'ieee5/classification/models/RF.pkl'
+[load]  Model 'XGB' loaded from 'ieee5/classification/models/XGB.pkl'
+[load]  Model 'KNN' loaded from 'ieee5/classification/models/KNN.pkl'
+
+  Running 1,000 simulations (subsample_rate=80%)...
+  [  10/1000] simulations complete
+  [  20/1000] simulations complete
+  [  30/1000] simulations complete
+  [  40/1000] simulations complete
+  [  50/1000] simulations complete
+  [  60/1000] simulations complete
+  [  70/1000] simulations complete
+  [  80/1000] simulations complete
+  [  90/1000] simulations complete
+  [ 100/1000] simulations complete
+  [ 110/1000] simulations complete
+  [ 120/1000] simulations complete
+  [ 130/1000] simulations complete
+  [ 140/1000] simulations complete

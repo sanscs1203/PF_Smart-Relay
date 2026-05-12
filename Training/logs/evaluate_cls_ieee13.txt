@@ -1,0 +1,78 @@
+
+============================================================
+  Classification — evaluation pipeline  [IEEE 13-Bus]
+============================================================
+
+[load]  'cls_val.csv'  →  8,525 samples, 12 features
+[load]  'cls_test.csv'  →  8,525 samples, 12 features
+[load]  Model 'RF' loaded from 'ieee13/classification/models/RF.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : RF
+────────────────────────────────────────────────────────────
+  [RF] Val  → weighted_recall=1.0000
+  [RF] Test → weighted_recall=0.9999
+  [RF] Per-class recall (test):
+    L A           1.0000
+    L B           1.0000
+    L C           1.0000
+    LL AB         1.0000
+    LL BC         0.9989
+    LL CA         1.0000
+    LLG AB        1.0000
+    LLG BC        1.0000
+    LLG CA        1.0000
+    LLL ABC       1.0000
+  [RF] Metrics saved → 'ieee13/classification/results/metrics_RF.json'
+[load]  Model 'XGB' loaded from 'ieee13/classification/models/XGB.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : XGB
+────────────────────────────────────────────────────────────
+  [XGB] Val  → weighted_recall=0.9999
+  [XGB] Test → weighted_recall=0.9996
+  [XGB] Per-class recall (test):
+    L A           1.0000
+    L B           1.0000
+    L C           0.9991
+    LL AB         1.0000
+    LL BC         0.9978
+    LL CA         1.0000
+    LLG AB        1.0000
+    LLG BC        1.0000
+    LLG CA        1.0000
+    LLL ABC       1.0000
+  [XGB] Metrics saved → 'ieee13/classification/results/metrics_XGB.json'
+[load]  Model 'KNN' loaded from 'ieee13/classification/models/KNN.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : KNN
+────────────────────────────────────────────────────────────
+  [KNN] Val  → weighted_recall=1.0000
+  [KNN] Test → weighted_recall=1.0000
+  [KNN] Per-class recall (test):
+    L A           1.0000
+    L B           1.0000
+    L C           1.0000
+    LL AB         1.0000
+    LL BC         1.0000
+    LL CA         1.0000
+    LLG AB        1.0000
+    LLG BC        1.0000
+    LLG CA        1.0000
+    LLL ABC       1.0000
+  [KNN] Metrics saved → 'ieee13/classification/results/metrics_KNN.json'
+
+============================================================
+  Test set summary
+============================================================
+  Model      Val WRecall  Test WRecall
+  --------------------------------------
+  RF              1.0000        0.9999
+  XGB             0.9999        0.9996
+  KNN             1.0000        1.0000
+[decision matrix] Saved → 'ieee13/classification/results/decision_matrix.json'
+
+[done]  Evaluation complete for IEEE 13-Bus.
+        Results → 'ieee13/classification/results'
+

@@ -44,6 +44,7 @@
 #   - data/raw/ieee5.csv  must exist before running the ieee5 chain.
 # =============================================================================
 
+version: '2.3'
 services:
 
   # =========================
@@ -53,6 +54,7 @@ services:
   preprocess-ieee13:
     build: .
     container_name: sr_preprocess_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -68,6 +70,7 @@ services:
   split-ieee13:
     build: .
     container_name: sr_split_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -86,6 +89,7 @@ services:
   preprocess-ieee5:
     build: .
     container_name: sr_preprocess_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -104,6 +108,7 @@ services:
   split-ieee5:
     build: .
     container_name: sr_split_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -126,7 +131,7 @@ services:
   train-det-ieee13:
     build: .
     container_name: sr_train_det_ieee13
-    # runtime: nvidia
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -145,7 +150,7 @@ services:
   train-cls-ieee13:
     build: .
     container_name: sr_train_cls_ieee13
-    # runtime: nvidia
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -168,7 +173,7 @@ services:
   train-det-ieee5:
     build: .
     container_name: sr_train_det_ieee5
-    # runtime: nvidia
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -187,7 +192,7 @@ services:
   train-cls-ieee5:
     build: .
     container_name: sr_train_cls_ieee5
-    # runtime: nvidia
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -210,6 +215,7 @@ services:
   evaluate-det-ieee13:
     build: .
     container_name: sr_evaluate_det_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -228,6 +234,7 @@ services:
   mcdm-det-ieee13:
     build: .
     container_name: sr_mcdm_det_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -246,6 +253,7 @@ services:
   predict-det-ieee13:
     build: .
     container_name: sr_predict_det_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -264,6 +272,7 @@ services:
   evaluate-cls-ieee13:
     build: .
     container_name: sr_evaluate_cls_ieee13
+    runtime: nvidia    
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -282,6 +291,7 @@ services:
   mcdm-cls-ieee13:
     build: .
     container_name: sr_mcdm_cls_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -300,6 +310,7 @@ services:
   predict-cls-ieee13:
     build: .
     container_name: sr_predict_cls_ieee13
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -322,6 +333,7 @@ services:
   evaluate-det-ieee5:
     build: .
     container_name: sr_evaluate_det_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -340,6 +352,7 @@ services:
   mcdm-det-ieee5:
     build: .
     container_name: sr_mcdm_det_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -358,6 +371,7 @@ services:
   predict-det-ieee5:
     build: .
     container_name: sr_predict_det_ieee5
+    runtime: nvidia    
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -376,6 +390,7 @@ services:
   evaluate-cls-ieee5:
     build: .
     container_name: sr_evaluate_cls_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -394,6 +409,7 @@ services:
   mcdm-cls-ieee5:
     build: .
     container_name: sr_mcdm_cls_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils
@@ -412,6 +428,7 @@ services:
   predict-cls-ieee5:
     build: .
     container_name: sr_predict_cls_ieee5
+    runtime: nvidia
     volumes:
       - ./data:/app/data
       - ./utils:/app/utils

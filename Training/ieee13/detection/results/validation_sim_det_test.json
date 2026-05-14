@@ -1,0 +1,21 @@
+{
+  "mode": "sim",
+  "model_id": "RF",
+  "threshold": 0.19,
+  "n_samples": 10025,
+  "metrics": {
+    "recall": 1.0,
+    "specificity": 1.0,
+    "ahp_score": 1.0,
+    "confusion_matrix": [
+      [
+        1500,
+        0
+      ],
+      [
+        0,
+        8525
+      ]
+    ]
+  }
+}

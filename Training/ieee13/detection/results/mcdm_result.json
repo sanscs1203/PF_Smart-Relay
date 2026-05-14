@@ -1,0 +1,51 @@
+{
+  "metric_names": [
+    "Recall",
+    "Specificity"
+  ],
+  "model_names": [
+    "RF",
+    "SVM",
+    "MLP"
+  ],
+  "weights": {
+    "ahp": [
+      0.75,
+      0.25
+    ]
+  },
+  "ranking": {
+    "nominal": [
+      "RF",
+      "MLP",
+      "SVM"
+    ],
+    "nominal_scores": [
+      0.333389,
+      0.333278,
+      0.333333
+    ],
+    "win_rates": {
+      "RF": 100.0,
+      "SVM": 0.0,
+      "MLP": 0.0
+    },
+    "score_mean": {
+      "RF": 0.333389,
+      "SVM": 0.333277,
+      "MLP": 0.333333
+    },
+    "score_std": {
+      "RF": 2.9e-05,
+      "SVM": 2.9e-05,
+      "MLP": 0.0
+    },
+    "stability_index": 1.0,
+    "verdict": "ROBUST"
+  },
+  "dependability_override": {
+    "applied": false,
+    "reason": "No model dominates RF under spec_margin=0.05. Nominal winner retained."
+  },
+  "best_model": "RF"
+}

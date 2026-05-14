@@ -1,0 +1,39 @@
+{
+  "model_names": [
+    "RF",
+    "XGB",
+    "KNN"
+  ],
+  "metric": "weighted_recall",
+  "ranking": {
+    "nominal": [
+      "RF",
+      "KNN",
+      "XGB"
+    ],
+    "nominal_scores": [
+      1.0,
+      0.999783,
+      0.999783
+    ],
+    "win_rates": {
+      "RF": 95.4,
+      "XGB": 0.8,
+      "KNN": 3.8
+    },
+    "score_mean": {
+      "RF": 0.999831,
+      "XGB": 0.999458,
+      "KNN": 0.99945
+    },
+    "score_std": {
+      "RF": 0.000192,
+      "XGB": 0.000331,
+      "KNN": 0.000341
+    },
+    "stability_index": 0.41,
+    "verdict": "UNSTABLE"
+  },
+  "selection_reason": "nominal winner confirmed by Monte Carlo (win rate=95.4%)",
+  "best_model": "RF"
+}

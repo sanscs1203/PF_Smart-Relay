@@ -1,0 +1,23 @@
+[
+  {
+    "model_id": "RF",
+    "train_score": 1.0,
+    "cv_score": 0.999975,
+    "gap": 2.5e-05,
+    "overfit_flag": false
+  },
+  {
+    "model_id": "XGB",
+    "train_score": 1.0,
+    "cv_score": 0.999723,
+    "gap": 0.000277,
+    "overfit_flag": false
+  },
+  {
+    "model_id": "KNN",
+    "train_score": 1.0,
+    "cv_score": 0.999824,
+    "gap": 0.000176,
+    "overfit_flag": false
+  }
+]

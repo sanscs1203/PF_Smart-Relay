@@ -1,0 +1,21 @@
+{
+  "model_names": [
+    "RF",
+    "XGB",
+    "KNN"
+  ],
+  "metric_names": [
+    "weighted_recall"
+  ],
+  "decision_matrix": [
+    [
+      1.0
+    ],
+    [
+      0.999783
+    ],
+    [
+      0.999783
+    ]
+  ]
+}

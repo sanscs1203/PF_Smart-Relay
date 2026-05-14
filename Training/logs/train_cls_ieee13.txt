@@ -1,0 +1,64 @@
+
+============================================================
+  Classification — training pipeline  [IEEE 13-Bus]
+============================================================
+
+[load]  'cls_train.csv'  →  39,782 samples, 12 features
+[scaler] Found at 'data/processed/ieee13/cls_scaler.pkl'  (splits already scaled — no re-scaling)
+  Class distribution — cls_train:
+    L A            4301  (10.8%)
+    L B            4301  (10.8%)
+    L C            5376  (13.5%)
+    LL AB          3226  (8.1%)
+    LL BC          4301  (10.8%)
+    LL CA          3763  (9.5%)
+    LLG AB         3225  (8.1%)
+    LLG BC         4301  (10.8%)
+    LLG CA         3763  (9.5%)
+    LLL ABC        3225  (8.1%)
+
+  LabelEncoder classes: ['L A', 'L B', 'L C', 'LL AB', 'LL BC', 'LL CA', 'LLG AB', 'LLG BC', 'LLG CA', 'LLL ABC']
+  Saved → 'ieee13/classification/models/label_encoder.pkl'
+
+────────────────────────────────────────────────────────────
+  Training : RF  (360 combinations × 5 folds)
+────────────────────────────────────────────────────────────
+Fitting 5 folds for each of 360 candidates, totalling 1800 fits
+  [RF] Done in 30112.6s  |  best CV score: 1.0000
+  [RF] Best params: {'max_depth': 20, 'max_features': 'sqrt', 'min_samples_leaf': 2, 'min_samples_split': 2, 'n_estimators': 100}
+  [RF] train=1.0000  cv=1.0000  gap=0.0000  ✓  ok
+  [RF] Model saved  → 'ieee13/classification/models/RF.pkl'
+  [RF] CV results saved → 'ieee13/classification/results/cv_results_RF.csv'
+
+────────────────────────────────────────────────────────────
+  Training : XGB  (108 combinations × 5 folds)
+────────────────────────────────────────────────────────────
+Fitting 5 folds for each of 108 candidates, totalling 540 fits
+  [XGB] Done in 53834.8s  |  best CV score: 0.9997
+  [XGB] Best params: {'colsample_bytree': 0.8, 'learning_rate': 0.3, 'max_depth': 3, 'n_estimators': 200, 'subsample': 0.8}
+  [XGB] train=1.0000  cv=0.9997  gap=0.0003  ✓  ok
+  [XGB] Model saved  → 'ieee13/classification/models/XGB.pkl'
+  [XGB] CV results saved → 'ieee13/classification/results/cv_results_XGB.csv'
+
+────────────────────────────────────────────────────────────
+  Training : KNN  (16 combinations × 5 folds)
+────────────────────────────────────────────────────────────
+Fitting 5 folds for each of 16 candidates, totalling 80 fits
+  [KNN] Done in 57.7s  |  best CV score: 0.9998
+  [KNN] Best params: {'metric': 'euclidean', 'n_neighbors': 3, 'weights': 'distance'}
+  [KNN] train=1.0000  cv=0.9998  gap=0.0002  ✓  ok
+  [KNN] Model saved  → 'ieee13/classification/models/KNN.pkl'
+  [KNN] CV results saved → 'ieee13/classification/results/cv_results_KNN.csv'
+
+============================================================
+  Overfitting check summary
+============================================================
+  RF      train=1.0000  cv=1.0000  gap=0.0000  ✓
+  XGB     train=1.0000  cv=0.9997  gap=0.0003  ✓
+  KNN     train=1.0000  cv=0.9998  gap=0.0002  ✓
+[overfit] Summary saved → 'ieee13/classification/results/overfit_check.json'
+
+[done]  Training complete for IEEE 13-Bus.
+        Models  → 'ieee13/classification/models'
+        Results → 'ieee13/classification/results'
+

@@ -1,0 +1,68 @@
+
+============================================================
+  Detection — evaluation pipeline  [IEEE 5-Bus]
+============================================================
+
+[load]  'det_val.csv'  →  5,222 samples, 12 features
+[load]  'det_test.csv'  →  5,223 samples, 12 features
+============================================================
+AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
+============================================================
+
+  Pairwise Comparison Matrix:
+
+                      Recall Specificity
+  Recall              1.0000      3.0000
+  Specificity         0.3333      1.0000
+
+  Principal Eigenvalue (λ_max): 2.0000
+  Consistency Index (CI):       0.0000
+  Random Index (RI):            0.0000
+  Consistency Ratio (CR):       0.0000
+  Status: ✅ CONSISTENT (CR < 0.10)
+
+  Priority Weights:
+  --------------------------------------------
+  Recall         : 0.750000  ██████████████████████████████
+  Specificity    : 0.250000  ██████████
+  --------------------------------------------
+  Sum            : 1.000000
+
+[load]  Model 'RF' loaded from 'ieee5/detection/models/RF.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : RF
+────────────────────────────────────────────────────────────
+  [RF] Optimal threshold : 0.2100  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
+  [RF] Test  → recall=1.0000  spec=0.9967  ahp=0.9992
+  [RF] Metrics saved → 'ieee5/detection/results/metrics_RF.json'
+[load]  Model 'SVM' loaded from 'ieee5/detection/models/SVM.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : SVM
+────────────────────────────────────────────────────────────
+  [SVM] Optimal threshold : 0.1300  |  ahp_ref=0.9993  (recall=0.9996  spec=1.0000  ahp=0.9997)
+  [SVM] Test  → recall=0.9998  spec=0.9984  ahp=0.9994
+  [SVM] Metrics saved → 'ieee5/detection/results/metrics_SVM.json'
+[load]  Model 'MLP' loaded from 'ieee5/detection/models/MLP.pkl'
+
+────────────────────────────────────────────────────────────
+  Evaluating : MLP
+────────────────────────────────────────────────────────────
+  [MLP] Optimal threshold : 0.2400  |  ahp_ref=0.9998  (recall=0.9998  spec=1.0000  ahp=0.9998)
+  [MLP] Test  → recall=1.0000  spec=0.9984  ahp=0.9996
+  [MLP] Metrics saved → 'ieee5/detection/results/metrics_MLP.json'
+
+============================================================
+  Test set summary
+============================================================
+  Model     Threshold     Recall       Spec         AHP
+  ----------------------------------------------------------
+  RF             0.21     1.0000     0.9967     0.9992
+  SVM            0.13     0.9998     0.9984     0.9994
+  MLP            0.24     1.0000     0.9984     0.9996
+[decision matrix] Saved → 'ieee5/detection/results/decision_matrix.json'
+
+[done]  Evaluation complete for IEEE 5-Bus.
+        Results → 'ieee5/detection/results'
+

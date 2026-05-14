@@ -1,0 +1,25 @@
+{
+  "model_names": [
+    "RF",
+    "SVM",
+    "MLP"
+  ],
+  "metric_names": [
+    "Recall",
+    "Specificity"
+  ],
+  "decision_matrix": [
+    [
+      1.0,
+      1.0
+    ],
+    [
+      1.0,
+      0.998667
+    ],
+    [
+      1.0,
+      0.999333
+    ]
+  ]
+}

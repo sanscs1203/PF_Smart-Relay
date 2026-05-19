@@ -16,36 +16,36 @@
   },
   "ranking": {
     "nominal": [
-      "RF",
       "MLP",
-      "SVM"
+      "SVM",
+      "RF"
     ],
     "nominal_scores": [
+      0.333222,
       0.333389,
-      0.333278,
-      0.333333
+      0.333389
     ],
     "win_rates": {
-      "RF": 100.0,
-      "SVM": 0.0,
+      "RF": 0.0,
+      "SVM": 100.0,
       "MLP": 0.0
     },
     "score_mean": {
-      "RF": 0.333389,
-      "SVM": 0.333277,
-      "MLP": 0.333333
+      "RF": 0.333221,
+      "SVM": 0.333389,
+      "MLP": 0.333389
     },
     "score_std": {
-      "RF": 2.9e-05,
+      "RF": 5.8e-05,
       "SVM": 2.9e-05,
-      "MLP": 0.0
+      "MLP": 2.9e-05
     },
     "stability_index": 1.0,
     "verdict": "ROBUST"
   },
   "dependability_override": {
     "applied": false,
-    "reason": "No model dominates RF under spec_margin=0.05. Nominal winner retained."
+    "reason": "No model dominates SVM under spec_margin=0.05. Nominal winner retained."
   },
-  "best_model": "RF"
+  "best_model": "SVM"
 }

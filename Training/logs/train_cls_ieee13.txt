@@ -21,21 +21,21 @@
   Saved → 'ieee13/classification/models/label_encoder.pkl'
 
 ────────────────────────────────────────────────────────────
-  Training : RF  (360 combinations × 5 folds)
+  Training : RF  (72 combinations × 5 folds)
 ────────────────────────────────────────────────────────────
-Fitting 5 folds for each of 360 candidates, totalling 1800 fits
-  [RF] Done in 30112.6s  |  best CV score: 1.0000
-  [RF] Best params: {'max_depth': 20, 'max_features': 'sqrt', 'min_samples_leaf': 2, 'min_samples_split': 2, 'n_estimators': 100}
+Fitting 5 folds for each of 72 candidates, totalling 360 fits
+  [RF] Done in 4013.5s  |  best CV score: 1.0000
+  [RF] Best params: {'max_depth': 15, 'max_features': 'sqrt', 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100}
   [RF] train=1.0000  cv=1.0000  gap=0.0000  ✓  ok
   [RF] Model saved  → 'ieee13/classification/models/RF.pkl'
   [RF] CV results saved → 'ieee13/classification/results/cv_results_RF.csv'
 
 ────────────────────────────────────────────────────────────
-  Training : XGB  (108 combinations × 5 folds)
+  Training : XGB  (48 combinations × 5 folds)
 ────────────────────────────────────────────────────────────
-Fitting 5 folds for each of 108 candidates, totalling 540 fits
-  [XGB] Done in 53834.8s  |  best CV score: 0.9997
-  [XGB] Best params: {'colsample_bytree': 0.8, 'learning_rate': 0.3, 'max_depth': 3, 'n_estimators': 200, 'subsample': 0.8}
+Fitting 5 folds for each of 48 candidates, totalling 240 fits
+  [XGB] Done in 23405.8s  |  best CV score: 0.9997
+  [XGB] Best params: {'colsample_bytree': 0.8, 'learning_rate': 0.1, 'max_depth': 6, 'n_estimators': 300, 'subsample': 1.0}
   [XGB] train=1.0000  cv=0.9997  gap=0.0003  ✓  ok
   [XGB] Model saved  → 'ieee13/classification/models/XGB.pkl'
   [XGB] CV results saved → 'ieee13/classification/results/cv_results_XGB.csv'
@@ -44,9 +44,9 @@ Fitting 5 folds for each of 108 candidates, totalling 540 fits
   Training : KNN  (16 combinations × 5 folds)
 ────────────────────────────────────────────────────────────
 Fitting 5 folds for each of 16 candidates, totalling 80 fits
-  [KNN] Done in 57.7s  |  best CV score: 0.9998
+  [KNN] Done in 48.8s  |  best CV score: 0.9999
   [KNN] Best params: {'metric': 'euclidean', 'n_neighbors': 3, 'weights': 'distance'}
-  [KNN] train=1.0000  cv=0.9998  gap=0.0002  ✓  ok
+  [KNN] train=1.0000  cv=0.9999  gap=0.0001  ✓  ok
   [KNN] Model saved  → 'ieee13/classification/models/KNN.pkl'
   [KNN] CV results saved → 'ieee13/classification/results/cv_results_KNN.csv'
 
@@ -55,7 +55,7 @@ Fitting 5 folds for each of 16 candidates, totalling 80 fits
 ============================================================
   RF      train=1.0000  cv=1.0000  gap=0.0000  ✓
   XGB     train=1.0000  cv=0.9997  gap=0.0003  ✓
-  KNN     train=1.0000  cv=0.9998  gap=0.0002  ✓
+  KNN     train=1.0000  cv=0.9999  gap=0.0001  ✓
 [overfit] Summary saved → 'ieee13/classification/results/overfit_check.json'
 
 [done]  Training complete for IEEE 13-Bus.

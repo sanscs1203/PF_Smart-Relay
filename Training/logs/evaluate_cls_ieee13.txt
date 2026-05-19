@@ -11,13 +11,13 @@
   Evaluating : RF
 ────────────────────────────────────────────────────────────
   [RF] Val  → weighted_recall=1.0000
-  [RF] Test → weighted_recall=0.9999
+  [RF] Test → weighted_recall=0.9998
   [RF] Per-class recall (test):
     L A           1.0000
     L B           1.0000
     L C           1.0000
     LL AB         1.0000
-    LL BC         0.9989
+    LL BC         0.9978
     LL CA         1.0000
     LLG AB        1.0000
     LLG BC        1.0000
@@ -29,14 +29,14 @@
 ────────────────────────────────────────────────────────────
   Evaluating : XGB
 ────────────────────────────────────────────────────────────
-  [XGB] Val  → weighted_recall=0.9999
-  [XGB] Test → weighted_recall=0.9996
+  [XGB] Val  → weighted_recall=1.0000
+  [XGB] Test → weighted_recall=0.9999
   [XGB] Per-class recall (test):
     L A           1.0000
     L B           1.0000
-    L C           0.9991
+    L C           1.0000
     LL AB         1.0000
-    LL BC         0.9978
+    LL BC         0.9989
     LL CA         1.0000
     LLG AB        1.0000
     LLG BC        1.0000
@@ -68,8 +68,8 @@
 ============================================================
   Model      Val WRecall  Test WRecall
   --------------------------------------
-  RF              1.0000        0.9999
-  XGB             0.9999        0.9996
+  RF              1.0000        0.9998
+  XGB             1.0000        0.9999
   KNN             1.0000        1.0000
 [decision matrix] Saved → 'ieee13/classification/results/decision_matrix.json'
 

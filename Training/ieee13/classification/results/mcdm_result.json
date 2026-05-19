@@ -8,32 +8,32 @@
   "ranking": {
     "nominal": [
       "KNN",
-      "RF",
-      "XGB"
+      "XGB",
+      "RF"
     ],
     "nominal_scores": [
+      0.999765,
       0.999883,
-      0.999648,
       1.0
     ],
     "win_rates": {
-      "RF": 47.5,
-      "XGB": 0.0,
-      "KNN": 52.5
+      "RF": 8.1,
+      "XGB": 12.0,
+      "KNN": 79.9
     },
     "score_mean": {
-      "RF": 0.999869,
-      "XGB": 0.999442,
-      "KNN": 0.999866
+      "RF": 0.999728,
+      "XGB": 0.999825,
+      "KNN": 0.999968
     },
     "score_std": {
-      "RF": 5.6e-05,
-      "XGB": 0.000127,
-      "KNN": 0.000186
+      "RF": 0.000119,
+      "XGB": 9.8e-05,
+      "KNN": 7e-05
     },
-    "stability_index": 0.718,
+    "stability_index": 0.822,
     "verdict": "ROBUST"
   },
-  "selection_reason": "nominal winner confirmed by Monte Carlo (win rate=52.5%)",
+  "selection_reason": "nominal winner confirmed by Monte Carlo (win rate=79.9%)",
   "best_model": "KNN"
 }

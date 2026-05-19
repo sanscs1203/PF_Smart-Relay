@@ -1,6 +1,6 @@
 {
   "model_id": "SVM",
-  "optimal_threshold": 0.44,
+  "optimal_threshold": 0.1,
   "val": {
     "recall": 1.0,
     "specificity": 1.0,
@@ -18,12 +18,12 @@
   },
   "test": {
     "recall": 1.0,
-    "specificity": 0.998667,
-    "ahp_score": 0.999667,
+    "specificity": 1.0,
+    "ahp_score": 1.0,
     "confusion_matrix": [
       [
-        1498,
-        2
+        1500,
+        0
       ],
       [
         0,

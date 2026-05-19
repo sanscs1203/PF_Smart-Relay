@@ -9,19 +9,19 @@ sys:1: DtypeWarning: Columns (0,2) have mixed types.Specify dtype option on impo
  All 12 feature columns are present.
  Label column 'Tipo_Falla' is present.
  No NaN values found in features or labels.
- All fault types in 'Tipo_Falla' are valid: {'LLG BC', 'L B', 'LL CA', 'LLL ABC', 'Sin_Falla', 'L C', 'LL BC', 'LLG AB', 'LL AB', 'L A', 'LLG CA'}
+ All fault types in 'Tipo_Falla' are valid: {'LL AB', 'L A', 'LL BC', 'LLG BC', 'L B', 'LLL ABC', 'LL CA', 'Sin_Falla', 'LLG AB', 'L C', 'LLG CA'}
 
  Class distribution in 'Tipo_Falla':
   Sin_Falla        10,000  ( 15.0%)
   L C               7,680  ( 11.5%)
-  L A               6,144  (  9.2%)
   L B               6,144  (  9.2%)
+  L A               6,144  (  9.2%)
   LL BC             6,144  (  9.2%)
   LLG BC            6,144  (  9.2%)
   LLG CA            5,376  (  8.0%)
   LL CA             5,376  (  8.0%)
-  LL AB             4,608  (  6.9%)
   LLL ABC           4,608  (  6.9%)
+  LL AB             4,608  (  6.9%)
   LLG AB            4,608  (  6.9%)
 
 [detection]  Total rows : 66,832

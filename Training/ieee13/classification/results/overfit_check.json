@@ -9,15 +9,15 @@
   {
     "model_id": "XGB",
     "train_score": 1.0,
-    "cv_score": 0.999723,
-    "gap": 0.000277,
+    "cv_score": 0.999749,
+    "gap": 0.000251,
     "overfit_flag": false
   },
   {
     "model_id": "KNN",
     "train_score": 1.0,
-    "cv_score": 0.999824,
-    "gap": 0.000176,
+    "cv_score": 0.999925,
+    "gap": 7.5e-05,
     "overfit_flag": false
   }
 ]

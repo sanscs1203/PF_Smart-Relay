@@ -13,8 +13,8 @@
 ──────────────────────────────────────────────────────────────
   Step 1 — Nominal winner  (weighted recall on test set)
 ──────────────────────────────────────────────────────────────
-  RF        weighted_recall = 0.999883
-  XGB       weighted_recall = 0.999648
+  RF        weighted_recall = 0.999765
+  XGB       weighted_recall = 0.999883
   KNN       weighted_recall = 1.000000  ←  nominal winner
 
 ──────────────────────────────────────────────────────────────
@@ -137,35 +137,35 @@
   Nominal ranking (full cls_train, no perturbation):
   --------------------------------------------------
   #1  KNN         weighted_recall = 1.000000  ████████████████████████████████████████████████████████████
-  #2  RF          weighted_recall = 0.999883  ███████████████████████████████████████████████████████████
-  #3  XGB         weighted_recall = 0.999648  ███████████████████████████████████████████████████████████
+  #2  XGB         weighted_recall = 0.999883  ███████████████████████████████████████████████████████████
+  #3  RF          weighted_recall = 0.999765  ███████████████████████████████████████████████████████████
 
   Win rate per model (1,000 simulations):
   --------------------------------------------------
-  KNN          52.50%  ██████████████████████████
-  RF           47.50%  ███████████████████████
-  XGB           0.00%  
+  KNN          79.90%  ███████████████████████████████████████
+  XGB          12.00%  ██████
+  RF            8.10%  ████
 
   Score statistics (mean ± std):
   --------------------------------------------------
-  KNN         0.999866 ± 0.000186
-  RF          0.999869 ± 0.000056
-  XGB         0.999442 ± 0.000127
+  KNN         0.999968 ± 0.000070
+  XGB         0.999825 ± 0.000098
+  RF          0.999728 ± 0.000119
 
-  Stability index : 0.7180  (71.8% of simulations)
+  Stability index : 0.8220  (82.2% of simulations)
   Verdict         : ✅  ROBUST   — ranking stable under data variation
 
 
 ──────────────────────────────────────────────────────────────
   Step 3 — Best model selection  (win rate)
 ──────────────────────────────────────────────────────────────
-  ✅  Nominal winner 'KNN' confirmed by win rate (52.5%).
+  ✅  Nominal winner 'KNN' confirmed by win rate (79.9%).
 
 ==============================================================
   Best model       : KNN
-  Selection reason : nominal winner confirmed by Monte Carlo (win rate=52.5%)
-  Stability        : 0.7180  (ROBUST)
-  Win rate         : 52.5%
+  Selection reason : nominal winner confirmed by Monte Carlo (win rate=79.9%)
+  Stability        : 0.8220  (ROBUST)
+  Win rate         : 79.9%
 ==============================================================
 
 [save]  MCDM result saved → 'ieee13/classification/results/mcdm_result.json'

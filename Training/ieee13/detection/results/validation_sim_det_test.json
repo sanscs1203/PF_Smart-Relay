@@ -1,7 +1,7 @@
 {
   "mode": "sim",
-  "model_id": "RF",
-  "threshold": 0.19,
+  "model_id": "SVM",
+  "threshold": 0.1,
   "n_samples": 10025,
   "metrics": {
     "recall": 1.0,

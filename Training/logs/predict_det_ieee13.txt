@@ -3,12 +3,12 @@
   Detection — predict  [IEEE 13-Bus]  mode=sim
 ============================================================
 
-[mcdm]  Best model from mcdm_result.json: 'RF'
-[threshold] Optimal threshold for RF: 0.19
-[load]  Model 'RF' loaded from 'ieee13/detection/models/RF.pkl'
+[mcdm]  Best model from mcdm_result.json: 'SVM'
+[threshold] Optimal threshold for SVM: 0.10
+[load]  Model 'SVM' loaded from 'ieee13/detection/models/SVM.pkl'
 [load]  'det_test.csv'  →  10,025 samples  (labels present: fault=85.0%  no-fault=15.0%)
 [scaler] Applied to 10,025 samples
-[predict] fault=8525  no-fault=1500  (threshold=0.19)
+[predict] fault=8525  no-fault=1500  (threshold=0.10)
 
   Metrics vs ground truth:
   recall      = 1.0000

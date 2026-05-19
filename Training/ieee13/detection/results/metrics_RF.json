@@ -1,14 +1,14 @@
 {
   "model_id": "RF",
-  "optimal_threshold": 0.19,
+  "optimal_threshold": 0.33,
   "val": {
     "recall": 1.0,
-    "specificity": 0.999333,
-    "ahp_score": 0.999833,
+    "specificity": 1.0,
+    "ahp_score": 1.0,
     "confusion_matrix": [
       [
-        1499,
-        1
+        1500,
+        0
       ],
       [
         0,
@@ -18,12 +18,12 @@
   },
   "test": {
     "recall": 1.0,
-    "specificity": 1.0,
-    "ahp_score": 1.0,
+    "specificity": 0.998,
+    "ahp_score": 0.9995,
     "confusion_matrix": [
       [
-        1500,
-        0
+        1497,
+        3
       ],
       [
         0,

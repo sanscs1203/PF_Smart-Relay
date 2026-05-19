@@ -33,16 +33,16 @@ AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
 ────────────────────────────────────────────────────────────
   Evaluating : RF
 ────────────────────────────────────────────────────────────
-  [RF] Optimal threshold : 0.19  |  ahp_ref=0.9998  (recall=1.0000  spec=0.9993  ahp=0.9998)
-  [RF] Test  → recall=1.0000  spec=1.0000  ahp=1.0000
+  [RF] Optimal threshold : 0.33  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
+  [RF] Test  → recall=1.0000  spec=0.9980  ahp=0.9995
   [RF] Metrics saved → 'ieee13/detection/results/metrics_RF.json'
 [load]  Model 'SVM' loaded from 'ieee13/detection/models/SVM.pkl'
 
 ────────────────────────────────────────────────────────────
   Evaluating : SVM
 ────────────────────────────────────────────────────────────
-  [SVM] Optimal threshold : 0.44  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
-  [SVM] Test  → recall=1.0000  spec=0.9987  ahp=0.9997
+  [SVM] Optimal threshold : 0.10  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
+  [SVM] Test  → recall=1.0000  spec=1.0000  ahp=1.0000
   [SVM] Metrics saved → 'ieee13/detection/results/metrics_SVM.json'
 [load]  Model 'MLP' loaded from 'ieee13/detection/models/MLP.pkl'
 
@@ -50,7 +50,7 @@ AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
   Evaluating : MLP
 ────────────────────────────────────────────────────────────
   [MLP] Optimal threshold : 0.10  |  ahp_ref=1.0000  (recall=1.0000  spec=1.0000  ahp=1.0000)
-  [MLP] Test  → recall=1.0000  spec=0.9993  ahp=0.9998
+  [MLP] Test  → recall=1.0000  spec=1.0000  ahp=1.0000
   [MLP] Metrics saved → 'ieee13/detection/results/metrics_MLP.json'
 
 ============================================================
@@ -58,9 +58,9 @@ AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
 ============================================================
   Model     Threshold     Recall       Spec         AHP
   ----------------------------------------------------------
-  RF             0.19     1.0000     1.0000     1.0000
-  SVM            0.44     1.0000     0.9987     0.9997
-  MLP            0.10     1.0000     0.9993     0.9998
+  RF             0.33     1.0000     0.9980     0.9995
+  SVM            0.10     1.0000     1.0000     1.0000
+  MLP            0.10     1.0000     1.0000     1.0000
 [decision matrix] Saved → 'ieee13/detection/results/decision_matrix.json'
 
 [done]  Evaluation complete for IEEE 13-Bus.

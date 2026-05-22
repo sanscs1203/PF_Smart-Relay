@@ -3,38 +3,26 @@ ieee13/classification/train.py
 ------------------------------
 Trains three candidate models (Random Forest, XGBoost, kNN) for the
 multiclass fault-classification module on the IEEE 13-bus network.
+Optionally, real laboratory data can be mixed into the training set.
 
 Responsibilities
 ----------------
-- Load cls_train.csv via utils.io.load_split().
-- Verify cls_scaler.pkl exists via utils.io.verify_scaler().
-- Build a GridSearchCV-compatible weighted-recall scorer.
-- Run GridSearchCV (5-fold StratifiedKFold) on the training set for each
-  model, optimising weighted recall.
+- Load cls_train.csv and optionally real CSV with the same 12 features + label.
+- Verify cls_scaler.pkl exists and use it to transform real data.
+- Build a weighted-recall scorer.
+- Run RandomizedSearchCV (5-fold StratifiedKFold) on the training set
+  (simulated + optional real) for each model, optimising weighted recall.
 - Perform an overfitting check (train score vs CV score gap).
-- Save each best estimator to models/<model_id>.pkl via joblib.
-- Save GridSearchCV results to results/cv_results_<model_id>.csv.
+- Save each best estimator to models/<model_id>.pkl.
+- Save RandomizedSearchCV results to results/cv_results_<model_id>.csv.
 - Save overfitting summary to results/overfit_check.json.
 
-What this script does NOT do
------------------------------
-- Does not evaluate on the validation or test set  →  evaluate.py
-- Does not run Monte Carlo analysis                →  mcdm.py
-- Does not select the best model                   →  mcdm.py
-- Does not generate plots                          →  utils/plots.py
-- Does not optimise a decision threshold           →  not applicable
-                                                      (multiclass uses
-                                                       predict() directly)
-
-Utility modules used
----------------------
-- utils.io.load_config()   : load YAML config
-- utils.io.load_split()    : load split CSV → (X, y)
-- utils.io.verify_scaler() : verify cls_scaler.pkl exists
-
-Usage (called from project root)
----------------------------------
+Usage (called from project root):
+    # Training with simulation only
     python ieee13/classification/train.py --config ieee13/config.yaml
+
+    # Training with simulation + real data
+    python ieee13/classification/train.py --config ieee13/config.yaml --real-data data/real/lab_data.csv
 """
 
 import argparse
@@ -50,14 +38,14 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import recall_score
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
 
 # Add project root to path so utils/ is importable regardless of cwd
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.io import load_config, load_split, verify_scaler   # shared I/O helpers
+from utils.io import load_config, load_split, verify_scaler
 
 # Suppress convergence and UndefinedMetric warnings
 warnings.filterwarnings("ignore")
@@ -65,46 +53,58 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 
 # ---------------------------------------------------------------------------
+# Helper: load real dataset (same features + label_classif)
+# ---------------------------------------------------------------------------
+def load_real_dataset(csv_path: str, scaler: StandardScaler) -> Tuple[np.ndarray, np.ndarray]:
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Real dataset not found: {path}")
+    df = pd.read_csv(path, sep=";", decimal=",")
+
+    feature_cols = ["Va", "Vb", "Vc", "Ia", "Ib", "Ic"]
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Real dataset missing feature columns: {missing}")
+
+    # 1. Seleccionar la etiqueta correcta (específica de fase)
+    if "label_classif" in df.columns:
+        # Si ya viene con el formato de simulación (poco probable en lab)
+        y = df["label_classif"].values
+    elif "Fases_en_Falla" in df.columns:
+        # Usar directamente la columna que ya tiene "L A", "LL BC", etc.
+        y = df["Fases_en_Falla"].astype(str).str.strip().values
+        # Filtrar filas sin falla
+        mask_sin_falla = np.isin(y, ["Sin_Falla", "N.A", "nan"])
+        if mask_sin_falla.any():
+            print(f"[real] Descartadas {mask_sin_falla.sum()} filas sin falla")
+            df = df[~mask_sin_falla]
+            y = y[~mask_sin_falla]
+    else:
+        raise ValueError("El CSV debe contener 'label_classif' o 'Fases_en_Falla'")
+
+    X = df[feature_cols].values
+    X_scaled = scaler.transform(X)
+
+    print(f"[real] Cargadas {len(X_scaled)} muestras desde '{path.name}'")
+    classes, counts = np.unique(y, return_counts=True)
+    for cls, cnt in zip(classes, counts):
+        print(f"         {cls:<15} {cnt:>3}")
+    return X_scaled, y
+
+# ---------------------------------------------------------------------------
 # Weighted-recall scorer
 # ---------------------------------------------------------------------------
-
 def build_weighted_recall_scorer() -> callable:
-    """Build a GridSearchCV-compatible weighted-recall scorer.
-
-    Weighted recall accounts for class frequency, making it robust under
-    class imbalance (relevant for the IEEE 13-bus network). When classes
-    are perfectly balanced, weighted recall equals macro recall.
-
-    Returns
-    -------
-    callable
-        Scorer compatible with GridSearchCV (higher = better).
-    """
     def weighted_recall_score(estimator, X, y) -> float:
         y_pred = estimator.predict(X)
         return recall_score(y, y_pred, average="weighted", zero_division=0)
-
     return weighted_recall_score
+
 
 # ---------------------------------------------------------------------------
 # Model factory
 # ---------------------------------------------------------------------------
-
 def build_model(model_key: str, cfg: Dict) -> Tuple:
-    """Instantiate a model and its param_grid from config.yaml.
-
-    Parameters
-    ----------
-    model_key : str
-        One of 'random_forest', 'xgboost', 'knn'.
-    cfg : Dict
-        Full parsed config dictionary.
-
-    Returns
-    -------
-    Tuple[estimator, Dict, str]
-        (unfitted model, param_grid dict, model_id string)
-    """
     model_cfg = cfg["classification"][model_key]
     model_id  = model_cfg["model_id"]
 
@@ -115,10 +115,7 @@ def build_model(model_key: str, cfg: Dict) -> Tuple:
             n_jobs       = model_cfg["n_jobs"],
         )
         grid = dict(model_cfg["param_grid"])
-        # YAML null → Python None for max_depth
-        grid["max_depth"] = [
-            None if v is None else int(v) for v in grid["max_depth"]
-        ]
+        grid["max_depth"] = [None if v is None else int(v) for v in grid["max_depth"]]
 
     elif model_key == "xgboost":
         model = XGBClassifier(
@@ -131,10 +128,7 @@ def build_model(model_key: str, cfg: Dict) -> Tuple:
         grid = dict(model_cfg["param_grid"])
 
     elif model_key == "knn":
-        # kNN is deterministic — no random_state needed
-        model = KNeighborsClassifier(
-            n_jobs = model_cfg["n_jobs"],
-        )
+        model = KNeighborsClassifier(n_jobs = model_cfg["n_jobs"])
         grid = dict(model_cfg["param_grid"])
 
     else:
@@ -146,50 +140,24 @@ def build_model(model_key: str, cfg: Dict) -> Tuple:
 # ---------------------------------------------------------------------------
 # Overfitting check
 # ---------------------------------------------------------------------------
-
 def overfitting_check(
-    grid_search: GridSearchCV,
-    X_train:     np.ndarray,
-    y_train:     np.ndarray,
-    model_id:    str,
+    random_search: RandomizedSearchCV,
+    X_train:       np.ndarray,
+    y_train:       np.ndarray,
+    model_id:      str,
     label_encoder: Optional[LabelEncoder] = None,
-    threshold:   float = 0.05,
+    threshold:     float = 0.05,
 ) -> Dict:
-    """Compare train score vs best CV score to flag potential overfitting.
-
-    Parameters
-    ----------
-    grid_search : GridSearchCV
-        Fitted GridSearchCV object.
-    X_train : np.ndarray
-        Training feature matrix.
-    y_train : np.ndarray
-        Training labels.
-    model_id : str
-        Short identifier for logging (e.g. 'RF').
-    threshold : float
-        Gap above which overfitting is flagged. Default 0.05 (5 pp).
-
-    Returns
-    -------
-    Dict
-        Keys: model_id, train_score, cv_score, gap, overfit_flag.
-    """
-    best_model  = grid_search.best_estimator_
+    best_model  = random_search.best_estimator_
     y_pred      = best_model.predict(X_train)
     if label_encoder is not None:
         y_pred = label_encoder.inverse_transform(y_pred)
-    train_score = recall_score(
-        y_train, y_pred, average="weighted", zero_division=0
-    )
-    cv_score    = grid_search.best_score_
+    train_score = recall_score(y_train, y_pred, average="weighted", zero_division=0)
+    cv_score    = random_search.best_score_
     gap         = train_score - cv_score
     overfit     = gap > threshold
-
     status = "⚠️  possible overfit" if overfit else "✓  ok"
-    print(f"  [{model_id}] train={train_score:.4f}  cv={cv_score:.4f}  "
-          f"gap={gap:.4f}  {status}")
-
+    print(f"  [{model_id}] train={train_score:.4f}  cv={cv_score:.4f}  gap={gap:.4f}  {status}")
     return {
         "model_id":     model_id,
         "train_score":  round(float(train_score), 6),
@@ -202,61 +170,22 @@ def overfitting_check(
 # ---------------------------------------------------------------------------
 # Save helpers
 # ---------------------------------------------------------------------------
-
 def save_model(estimator, models_dir: Path, model_id: str) -> None:
-    """Persist a fitted estimator to disk as a .pkl file.
-
-    Parameters
-    ----------
-    estimator : fitted sklearn estimator
-        Best estimator from GridSearchCV (refit on full train set).
-    models_dir : Path
-        Directory where the .pkl file will be saved.
-    model_id : str
-        Used as the filename stem (e.g. 'RF' → 'RF.pkl').
-    """
     models_dir.mkdir(parents=True, exist_ok=True)
     out_path = models_dir / f"{model_id}.pkl"
     joblib.dump(estimator, out_path)
     print(f"  [{model_id}] Model saved  → '{out_path}'")
 
-
-def save_cv_results(grid_search: GridSearchCV,
-                    results_dir: Path,
-                    model_id:    str) -> None:
-    """Save GridSearchCV cv_results_ to CSV, sorted by rank.
-
-    Per-split columns (split0_*, split1_*, ...) are dropped to keep
-    the file compact — mean and std columns are retained.
-
-    Parameters
-    ----------
-    grid_search : GridSearchCV
-        Fitted GridSearchCV object.
-    results_dir : Path
-        Directory for result files.
-    model_id : str
-        Used as part of the output filename.
-    """
+def save_cv_results(random_search: RandomizedSearchCV, results_dir: Path, model_id: str) -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
-    df   = pd.DataFrame(grid_search.cv_results_)
+    df   = pd.DataFrame(random_search.cv_results_)
     keep = [c for c in df.columns if not c.startswith("split")]
     df   = df[keep].sort_values("rank_test_score")
     out  = results_dir / f"cv_results_{model_id}.csv"
     df.to_csv(out, sep=";", decimal=",", index=False)
     print(f"  [{model_id}] CV results saved → '{out}'")
 
-
 def save_overfit_report(records: List[Dict], results_dir: Path) -> None:
-    """Save the overfitting check summary as JSON.
-
-    Parameters
-    ----------
-    records : List[Dict]
-        One dict per model, output of overfitting_check().
-    results_dir : Path
-        Directory for result files.
-    """
     results_dir.mkdir(parents=True, exist_ok=True)
     out = results_dir / "overfit_check.json"
     with open(out, "w", encoding="utf-8") as f:
@@ -265,105 +194,66 @@ def save_overfit_report(records: List[Dict], results_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Per-model training loop
+# Training loop per model
 # ---------------------------------------------------------------------------
-
 def train_model(
-    model_key:   str,
-    cfg:         Dict,
-    X_train:     np.ndarray,
-    y_train:     np.ndarray,
-    scorer:      callable,
-    cv:          StratifiedKFold,
-    models_dir:  Path,
-    results_dir: Path,
+    model_key:     str,
+    cfg:           Dict,
+    X_train:       np.ndarray,
+    y_train:       np.ndarray,
+    scorer:        callable,
+    cv:            StratifiedKFold,
+    models_dir:    Path,
+    results_dir:   Path,
     label_encoder: Optional[LabelEncoder] = None,
-) -> Tuple[GridSearchCV, Dict]:
-    """Run GridSearchCV for one model and persist outputs.
-
-    Parameters
-    ----------
-    model_key : str
-        Key in config.yaml classification section.
-    cfg : Dict
-        Full parsed config dictionary.
-    X_train : np.ndarray
-        Training feature matrix (already scaled).
-    y_train : np.ndarray
-        Training labels (fault type strings).
-    scorer : callable
-        Weighted-recall scorer.
-    cv : StratifiedKFold
-        Cross-validation splitter.
-    models_dir : Path
-        Where to save the .pkl model file.
-    results_dir : Path
-        Where to save CV results CSV.
-
-    Returns
-    -------
-    Tuple[GridSearchCV, Dict]
-        Fitted GridSearchCV and overfitting check dict.
-    """
-    model, grid, model_id = build_model(model_key, cfg)
+) -> Tuple[RandomizedSearchCV, Dict]:
+    model, param_dist, model_id = build_model(model_key, cfg)
+    model_cfg = cfg["classification"][model_key]
+    n_iter = model_cfg.get("n_iter", 20)
 
     n_combinations = 1
-    for v in grid.values():
+    for v in param_dist.values():
         n_combinations *= len(v)
+    n_iter = min(n_iter, n_combinations)
 
     print(f"\n{'─'*60}")
-    print(f"  Training : {model_id}  "
-          f"({n_combinations} combinations × "
+    print(f"  Training : {model_id}  ({n_iter} sampled iterations from {n_combinations} total × "
           f"{cfg['classification']['cv']['n_splits']} folds)")
     print(f"{'─'*60}")
 
     t0 = time.time()
 
-    gs = GridSearchCV(
-        estimator   = model,
-        param_grid  = grid,
-        scoring     = scorer,
-        cv          = cv,
-        n_jobs      = -1,
-        refit       = True,
-        verbose     = 1,
-        error_score = "raise",
+    rs = RandomizedSearchCV(
+        estimator           = model,
+        param_distributions = param_dist,
+        n_iter              = n_iter,
+        scoring             = scorer,
+        cv                  = cv,
+        n_jobs              = -1,
+        refit               = True,
+        verbose             = 2,
+        error_score         = "raise",
+        random_state        = cfg["classification"].get("random_state", 42),
     )
+
     y_fit = label_encoder.transform(y_train) if label_encoder is not None else y_train
-    gs.fit(X_train, y_fit)
+    rs.fit(X_train, y_fit)
 
     elapsed = time.time() - t0
-    print(f"  [{model_id}] Done in {elapsed:.1f}s  "
-          f"|  best CV score: {gs.best_score_:.4f}")
-    print(f"  [{model_id}] Best params: {gs.best_params_}")
+    print(f"  [{model_id}] Done in {elapsed:.1f}s  |  best CV score: {rs.best_score_:.4f}")
+    print(f"  [{model_id}] Best params: {rs.best_params_}")
 
-    overfit_info = overfitting_check(gs, X_train, y_train, model_id, label_encoder=label_encoder)
-    save_model(gs.best_estimator_, models_dir, model_id)
-    save_cv_results(gs, results_dir, model_id)
+    overfit_info = overfitting_check(rs, X_train, y_train, model_id, label_encoder=label_encoder)
+    save_model(rs.best_estimator_, models_dir, model_id)
+    save_cv_results(rs, results_dir, model_id)
 
-    return gs, overfit_info
+    return rs, overfit_info
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Main
 # ---------------------------------------------------------------------------
-
-def main(config_path: str) -> None:
-    """Full training pipeline for the classification module.
-
-    Steps
-    -----
-    1. Load config and verify data files (via utils.io).
-    2. Build weighted-recall scorer.
-    3. Train RF, XGBoost, kNN via GridSearchCV (5-fold StratifiedKFold).
-    4. Run overfitting check per model.
-    5. Save models (.pkl), CV results (.csv), overfit report (.json).
-
-    Parameters
-    ----------
-    config_path : str
-        Path to config.yaml for the target network.
-    """
+def main(config_path: str, real_data_path: Optional[str] = None) -> None:
     cfg = load_config(config_path)
 
     network       = cfg["network"]["name"]
@@ -375,16 +265,32 @@ def main(config_path: str) -> None:
     label_col     = "label_classif"
 
     print(f"\n{'='*60}")
-    print(f"  Classification — training pipeline  [{network}]")
+    print(f"  Classification — training pipeline (simulation + optional real)  [{network}]")
     print(f"{'='*60}\n")
 
-    # Load data (utils.io)
-    X_train, y_train = load_split(str(splits_dir / "cls_train.csv"), label_col)
+    # Load simulated training split (already scaled)
+    X_train_sim, y_train_sim = load_split(str(splits_dir / "cls_train.csv"), label_col)
     verify_scaler(str(processed_dir / "cls_scaler.pkl"))
 
-    # Class distribution summary
+    # Load scaler to apply to real data
+    scaler = joblib.load(processed_dir / "cls_scaler.pkl")
+    print(f"[scaler] Loaded from '{processed_dir / 'cls_scaler.pkl'}'")
+
+    # Combine with real data if provided
+    X_train = X_train_sim
+    y_train = y_train_sim
+    if real_data_path:
+        X_real, y_real = load_real_dataset(real_data_path, scaler)
+        X_train = np.vstack([X_train, X_real])
+        y_train = np.hstack([y_train, y_real])
+        print(f"[combined] Training set now has {len(X_train)} samples "
+              f"(sim: {len(X_train_sim)} + real: {len(X_real)})")
+    else:
+        print("[combined] Using simulation data only (no --real-data).")
+
+    # Class distribution summary (training)
     classes, counts = np.unique(y_train, return_counts=True)
-    print("  Class distribution — cls_train:")
+    print("\n  Class distribution — training set:")
     for cls, cnt in zip(classes, counts):
         print(f"    {cls:<12}  {cnt:>5}  ({cnt/len(y_train):.1%})")
     print()
@@ -397,10 +303,8 @@ def main(config_path: str) -> None:
     print(f"  LabelEncoder classes: {list(le.classes_)}")
     print(f"  Saved → '{models_dir / 'label_encoder.pkl'}'")
 
-    # Weighted-recall scorer
+    # Scorer and CV
     scorer = build_weighted_recall_scorer()
-
-    # Cross-validation splitter
     cv_cfg = cls_cfg["cv"]
     cv = StratifiedKFold(
         n_splits     = cv_cfg["n_splits"],
@@ -442,7 +346,7 @@ def main(config_path: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Train RF, XGBoost, and kNN for the fault classification module."
+        description="Train RF, XGBoost, and kNN for fault classification (simulation + optional real data)."
     )
     parser.add_argument(
         "--config",
@@ -450,10 +354,15 @@ if __name__ == "__main__":
         required = True,
         help     = "Path to config.yaml (e.g. 'ieee13/config.yaml')",
     )
+    parser.add_argument(
+        "--real-data",
+        type     = str,
+        help     = "Path to CSV with real samples (12 features + label_classif column)",
+    )
     args = parser.parse_args()
 
     try:
-        main(args.config)
+        main(args.config, args.real_data)
     except (FileNotFoundError, ValueError) as exc:
         print(f"\n[ERROR] {exc}", file=sys.stderr)
         sys.exit(1)

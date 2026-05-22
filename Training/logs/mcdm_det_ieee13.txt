@@ -40,26 +40,26 @@ AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
 ──────────────────────────────────────────────────────────────
 ==============================================================
   MONTE CARLO ROBUSTNESS ANALYSIS
-  Simulations : 1,000   Concentration : 10.0
+  Simulations : 200   Concentration : 10.0
 ==============================================================
 
   Nominal ranking (w_combined, no perturbation):
   --------------------------------------------------
-  #1  MLP         score = 0.333389  ████████████████████
-  #2  SVM         score = 0.333389  ████████████████████
-  #3  RF          score = 0.333222  ███████████████████
+  #1  SVM         score = 0.333510  ████████████████████
+  #2  RF          score = 0.333510  ████████████████████
+  #3  MLP         score = 0.332981  ███████████████████
 
-  Win rate per model (1,000 simulations):
+  Win rate per model (200 simulations):
   --------------------------------------------------
+  SVM           0.00%  
+  RF          100.00%  ██████████████████████████████████████████████████
   MLP           0.00%  
-  SVM         100.00%  ██████████████████████████████████████████████████
-  RF            0.00%  
 
   Score statistics (mean ± std):
   --------------------------------------------------
-  MLP         0.333389 ± 0.000029
-  SVM         0.333389 ± 0.000029
-  RF          0.333221 ± 0.000058
+  SVM         0.333515 ± 0.000095
+  RF          0.333515 ± 0.000095
+  MLP         0.332971 ± 0.000190
 
   Stability index : 1.0000  (100.0% of simulations)
   Verdict         : ✅  ROBUST   — ranking stable under weight uncertainty
@@ -68,12 +68,12 @@ AHP WEIGHTS (Analytic Hierarchy Process - Saaty, 1980)
 ──────────────────────────────────────────────────────────────
   Step 3 — Dependability override  (spec_margin=0.05)
 ──────────────────────────────────────────────────────────────
-  Nominal winner : SVM
+  Nominal winner : RF
   Override       : ❌ NO
-  Reason         : No model dominates SVM under spec_margin=0.05. Nominal winner retained.
+  Reason         : No model dominates RF under spec_margin=0.05. Nominal winner retained.
 
 ==============================================================
-  Best model    : SVM
+  Best model    : RF
   Stability     : 1.0000  (ROBUST)
   Win rate      : 100.0%
 ==============================================================

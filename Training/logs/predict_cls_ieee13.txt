@@ -1,42 +1,82 @@
 
 ============================================================
-  Classification — predict  [IEEE 13-Bus]  mode=sim
+  Clasificación — predict  [IEEE 13-Bus]  modo=lab
 ============================================================
 
-[mcdm]  Best model from mcdm_result.json: 'KNN'
+[mcdm]  Mejor modelo: 'KNN'
 [load]  Model 'KNN' loaded from 'ieee13/classification/models/KNN.pkl'
-[load]  'cls_test.csv'  →  8,525 samples  (labels present: 10 fault types)
-[scaler] Skipped — sim input is already scaled
+[load] Eliminadas 47 filas 'Sin_Falla' (clasificación solo opera sobre fallas).
+[load]  'lab_data.csv'  →  89 muestras  (10 tipos de falla):
+         L A               11
+         L B               15
+         L C               17
+         LL AB              9
+         LL BC             15
+         LL CA              9
+         LLG AB             3
+         LLG BC             5
+         LLG CA             3
+         LLL ABC            2
+[scaler] Cargado desde 'data/processed/ieee13/cls_scaler.pkl'
+[scaler] Aplicado a 89 muestras
 
-[predict] 8,525 samples classified:
-  L A             921  (10.8%)
-  L B             921  (10.8%)
-  L C            1152  (13.5%)
-  LL AB           691  (8.1%)
-  LL BC           922  (10.8%)
-  LL CA           807  (9.5%)
-  LLG AB          692  (8.1%)
-  LLG BC          921  (10.8%)
-  LLG CA          807  (9.5%)
-  LLL ABC         691  (8.1%)
+────────────────────────────────────────────────────────────
+  CV de robustez (modelo fijo, sin re-entrenamiento)
+────────────────────────────────────────────────────────────
 
-  Metrics vs ground truth:
-  weighted_recall = 1.0000
+[cv-eval] 89 muestras válidas, 10 clases, mín. muestras por clase = 2
+[cv-eval] Usando StratifiedKFold con k=2.
+
+  Estrategia : StratifiedKFold(k=2)
+  Pliegues   : 2
+  Weighted recall (CV) = 0.9662 ± 0.0116
+
+  Per-class recall (mean ± std):
+    L A              1.0000 ± 0.0000
+    L B              1.0000 ± 0.0000
+    L C              1.0000 ± 0.0000
+    LL AB            1.0000 ± 0.0000
+    LL BC            0.9286 ± 0.0714
+    LL CA            0.7750 ± 0.0250
+    LLG AB           1.0000 ± 0.0000
+    LLG BC           1.0000 ± 0.0000
+    LLG CA           1.0000 ± 0.0000
+    LLL ABC          1.0000 ± 0.0000
+[save]  Reporte → 'ieee13/classification/results/cv_eval_lab_lab_data.json'
+
+────────────────────────────────────────────────────────────
+  Continuando con inferencia completa...
+────────────────────────────────────────────────────────────
+
+[predict] 89 muestras clasificadas:
+  L A               11  (12.4%)
+  L B               15  (16.9%)
+  L C               17  (19.1%)
+  LL AB              9  (10.1%)
+  LL BC             14  (15.7%)
+  LL CA              7  (7.9%)
+  LLG AB             3  (3.4%)
+  LLG BC             6  (6.7%)
+  LLG CA             5  (5.6%)
+  LLL ABC            2  (2.2%)
+
+  Métricas vs ground truth (n=89, excluidos UNKNOWN=0):
+  weighted_recall = 0.9663
 
   Per-class recall:
-    L A           1.0000
-    L B           1.0000
-    L C           1.0000
-    LL AB         1.0000
-    LL BC         1.0000
-    LL CA         1.0000
-    LLG AB        1.0000
-    LLG BC        1.0000
-    LLG CA        1.0000
-    LLL ABC       1.0000
-[save]  Predictions saved → 'ieee13/classification/results/predictions_sim_cls_test.csv'
-[save]  Validation report saved → 'ieee13/classification/results/validation_sim_cls_test.json'
+    L A              1.0000
+    L B              1.0000
+    L C              1.0000
+    LL AB            1.0000
+    LL BC            0.9333
+    LL CA            0.7778
+    LLG AB           1.0000
+    LLG BC           1.0000
+    LLG CA           1.0000
+    LLL ABC          1.0000
+[save]  Predicciones → 'ieee13/classification/results/predictions_lab_lab_data.csv'
+[save]  Reporte → 'ieee13/classification/results/validation_lab_lab_data.json'
 
-[done]  Prediction complete for IEEE 13-Bus  (mode=sim).
-        Results → 'ieee13/classification/results'
+[done]  Clasificación completa para IEEE 13-Bus  (modo=lab).
+        Resultados → 'ieee13/classification/results'
 

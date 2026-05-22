@@ -1,38 +1,20 @@
+
 ============================================================
   Preprocessing pipeline — IEEE 13-BUS
+  Subsample fraction: 0.21  |  Fault multiplier: 1.0
 ============================================================
 
-sys:1: DtypeWarning: Columns (0,2) have mixed types.Specify dtype option on import or set low_memory=False.
 [load] Read 66,832 rows from 'data/raw/ieee13.csv'
+[filter] Eliminadas 18944 filas con resistencia = 100 Ω
+[filter] Eliminadas 6912 filas con fallas ['LLG AB', 'LLG BC', 'LLG CA', 'LLL ABC'] y resistencia=25Ω
+[subsample] Reducido de 40976 a 8605 filas (21%)
 
-[validate] Running dataset validation...
- All 12 feature columns are present.
- Label column 'Tipo_Falla' is present.
- No NaN values found in features or labels.
- All fault types in 'Tipo_Falla' are valid: {'LL AB', 'L A', 'LL BC', 'LLG BC', 'L B', 'LLL ABC', 'LL CA', 'Sin_Falla', 'LLG AB', 'L C', 'LLG CA'}
+[balance] Original no-fault: 2100, fault: 6505
+[balance] Target fault rows: 2100 (multiplier 1.0)
+[balance] Final: no-fault=2100, fault=2100 (ratio 1.00)
+[classif] Fault only: 6505 rows, 10 types
+[save] Saved 4,200 rows -> 'data/processed/ieee13/detection_data.csv'
+[save] Saved 6,505 rows -> 'data/processed/ieee13/classif_data.csv'
 
- Class distribution in 'Tipo_Falla':
-  Sin_Falla        10,000  ( 15.0%)
-  L C               7,680  ( 11.5%)
-  L B               6,144  (  9.2%)
-  L A               6,144  (  9.2%)
-  LL BC             6,144  (  9.2%)
-  LLG BC            6,144  (  9.2%)
-  LLG CA            5,376  (  8.0%)
-  LL CA             5,376  (  8.0%)
-  LLL ABC           4,608  (  6.9%)
-  LL AB             4,608  (  6.9%)
-  LLG AB            4,608  (  6.9%)
-
-[detection]  Total rows : 66,832
-             No-fault (0): 10,000
-             Fault    (1): 56,832
-[classif]    Total rows (fault only): 56,832
-             Unique fault types      : 10
-             Features                : 12 (original set)
-[save]  Saved 66,832 rows → 'data/processed/ieee13/detection_data.csv'
-[save]  Saved 56,832 rows → 'data/processed/ieee13/classif_data.csv'
-
-[done]  Preprocessing complete for IEEE 13-BUS.
-        Output directory: 'data/processed/ieee13'
+[done] Preprocessing complete.
 

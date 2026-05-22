@@ -38,9 +38,7 @@ from sklearn.preprocessing import StandardScaler
 # Base features (shared by detection and classification)
 BASE_FEATURE_COLS = [
     "Va", "Vb", "Vc",
-    "phi_Va", "phi_Vb", "phi_Vc",
-    "Ia", "Ib", "Ic",
-    "phi_Ia", "phi_Ib", "phi_Ic"
+    "Ia", "Ib", "Ic"
 ]
 
 # Detection uses 12 features

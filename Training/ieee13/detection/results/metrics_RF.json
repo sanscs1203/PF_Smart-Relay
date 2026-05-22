@@ -1,33 +1,33 @@
 {
   "model_id": "RF",
-  "optimal_threshold": 0.33,
+  "optimal_threshold": 0.1,
   "val": {
     "recall": 1.0,
     "specificity": 1.0,
     "ahp_score": 1.0,
     "confusion_matrix": [
       [
-        1500,
+        315,
         0
       ],
       [
         0,
-        8525
+        315
       ]
     ]
   },
   "test": {
     "recall": 1.0,
-    "specificity": 0.998,
-    "ahp_score": 0.9995,
+    "specificity": 1.0,
+    "ahp_score": 1.0,
     "confusion_matrix": [
       [
-        1497,
-        3
+        316,
+        0
       ],
       [
         0,
-        8525
+        315
       ]
     ]
   }

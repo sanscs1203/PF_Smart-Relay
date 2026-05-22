@@ -1,580 +1,292 @@
 """
-ieee13/classification/mcdm.py
------------------------------
-Runs the MCDM pipeline to select the best classification model from the
-three candidates (RF, XGBoost, kNN) evaluated by evaluate.py.
-
-MCDM pipeline
--------------
-1. Load decision matrix (weighted recall on test set) from evaluate.py.
-2. Select nominal winner — model with highest weighted recall.
-3. Monte Carlo robustness check — subsample cls_train N times, refit
-   each model, re-evaluate weighted recall, report win rates and
-   stability index.
-4. Best model = model with highest Monte Carlo win rate.
-   If the nominal winner has the highest win rate, it is confirmed.
-   If another model dominates in win rate, it overrides the nominal.
-   Ties in win rate fall back to the nominal winner.
-
-Design notes
-------------
-- No AHP: weighted recall is the single criterion — nothing to weight.
-- No dependability override: the asymmetric FN/FP logic of detection
-  does not apply to multiclass fault classification.
-- Monte Carlo perturbs the training dataset (subsample_rate from config),
-  not the weight vector. This measures sensitivity of the ranking to
-  training data variation, not to subjective weight choices.
-- Best hyperparameters are loaded ONCE before the simulation loop to
-  avoid redundant I/O on every iteration.
-
-Inputs
-------
-- results/decision_matrix.json      : produced by evaluate.py
-- data/splits/<network>/cls_train.csv : subsampled in each MC simulation
-- data/splits/<network>/cls_test.csv  : fixed evaluation set
-- config.yaml                        : Monte Carlo settings + model configs
-
-Outputs (results/)
-------------------
-- mcdm_result.json  : nominal winner, MC win rates, stability, best model
-
-Utility modules used
----------------------
-- utils.io.load_config()  : load YAML config
-- utils.io.load_split()   : load split CSV → (X, y)
-- utils.io.load_model()   : load fitted model from .pkl
-
-Usage (called from project root)
----------------------------------
-    python3 ieee13/classification/mcdm.py --config ieee13/config.yaml
+ieee13/classification/predict.py
+--------------------------------
+Runs inference with the best classification model selected by mcdm.py.
+Filters out 'Sin_Falla' rows. Expects labels in the standard format
+(L A, L B, L C, LL AB, LL BC, LL CA, LLG AB, LLG BC, LLG CA, LLL ABC).
 """
 
 import argparse
 import json
 import sys
-import warnings
-import joblib
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Optional, Tuple
 
+import joblib
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import recall_score
-from sklearn.neighbors import KNeighborsClassifier
-from xgboost import XGBClassifier
+import pandas as pd
+from sklearn.metrics import confusion_matrix, recall_score
+from sklearn.model_selection import StratifiedKFold
 
-# Add project root to path so utils/ is importable regardless of cwd
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.io import load_config, load_split, load_model   # shared I/O helpers
-
-warnings.filterwarnings("ignore")
-
+from utils.io import load_config, load_model
 
 # ---------------------------------------------------------------------------
-# Decision matrix loader
+# Constants
 # ---------------------------------------------------------------------------
+FEATURE_COLS_6 = ["Va", "Vb", "Vc", "Ia", "Ib", "Ic"]
 
-def load_decision_matrix(results_dir: Path) -> Tuple[np.ndarray, List[str], List[str]]:
-    """Load the decision matrix produced by evaluate.py.
+CLASSIFICATION_LABEL_COL = "label_classif"
 
-    Parameters
-    ----------
-    results_dir : Path
-        Directory containing decision_matrix.json.
-
-    Returns
-    -------
-    Tuple[np.ndarray, List[str], List[str]]
-        (decision_matrix, model_names, metric_names)
-
-    Raises
-    ------
-    FileNotFoundError
-        If decision_matrix.json does not exist.
-    """
-    path = results_dir / "decision_matrix.json"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Decision matrix not found: '{path}'\n"
-            "Run ieee13/classification/evaluate.py first."
-        )
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-
-    decision_matrix = np.array(payload["decision_matrix"], dtype=float)
-    model_names     = payload["model_names"]
-    metric_names    = payload["metric_names"]
-
-    print(f"[load]  Decision matrix loaded from '{path}'")
-    print(f"        Models  : {model_names}")
-    print(f"        Metrics : {metric_names}")
-    print(f"        Shape   : {decision_matrix.shape}")
-
-    return decision_matrix, model_names, metric_names
-
-
-# ---------------------------------------------------------------------------
-# Monte Carlo robustness — dataset perturbation
-# ---------------------------------------------------------------------------
-
-def _refit_model(
-    model_key: str,
-    params:    dict,
-    X_sub:     np.ndarray,
-    y_sub:     np.ndarray,
-):
-    """Refit a model on a training subsample using pre-loaded best params.
-
-    Parameters
-    ----------
-    model_key : str
-        One of 'random_forest', 'xgboost', 'knn'.
-    params : dict
-        Best hyperparameters extracted from the fitted .pkl model.
-        Loaded once before the simulation loop — not reloaded here.
-    X_sub : np.ndarray
-        Subsampled training features.
-    y_sub : np.ndarray
-        Subsampled training labels.
-
-    Returns
-    -------
-    fitted estimator
-    """
-    if model_key == "random_forest":
-        model = RandomForestClassifier(**params)
-    elif model_key == "xgboost":
-        model = XGBClassifier(**params)
-    elif model_key == "knn":
-        model = KNeighborsClassifier(**params)
+def convert_to_native(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_to_native(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_native(i) for i in obj]
     else:
-        raise ValueError(f"Unknown model key: '{model_key}'")
+        return obj
 
-    model.fit(X_sub, y_sub)
-    return model
+# ---------------------------------------------------------------------------
+# Data loading (filtra Sin_Falla, sin mapeo)
+# ---------------------------------------------------------------------------
+def load_input_csv(
+    csv_path: str,
+    filter_sin_falla: bool = True,
+) -> Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]:
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Input CSV not found: '{path}'")
+
+    df = pd.read_csv(path, sep=";", decimal=",")
+
+    feature_cols = FEATURE_COLS_6
+    print("[load] Using 6 feature columns (magnitudes only).")
+    
+    X = df[feature_cols].values
+
+    # Determine label column
+    label_col = None
+    if CLASSIFICATION_LABEL_COL in df.columns:
+        label_col = CLASSIFICATION_LABEL_COL
+    elif "Tipo_Falla" in df.columns:
+        label_col = "Tipo_Falla"
+    elif "Fases_en_Falla" in df.columns:
+        label_col = "Fases_en_Falla"
+
+    y = None
+    if label_col is not None:
+        y = df[label_col].values
+        if filter_sin_falla:
+            mask = y != "Sin_Falla"
+            removed = (~mask).sum()
+            if removed > 0:
+                print(f"[load] Eliminadas {removed} filas con etiqueta 'Sin_Falla' (solo fallas).")
+                X = X[mask]
+                y = y[mask]
+                df = df.iloc[mask]
+        classes, counts = np.unique(y, return_counts=True)
+        print(f"[load]  '{path.name}'  →  {X.shape[0]:,} muestras (fallas), {len(classes)} tipos de falla.")
+    else:
+        print(f"[load]  '{path.name}'  →  {X.shape[0]:,} muestras (sin etiqueta).")
+
+    return df, X, y
 
 
-def monte_carlo_cls_robustness(
-    cfg:          Dict,
-    model_keys:   List[str],
-    model_names:  List[str],
-    X_train:      np.ndarray,
-    y_train:      np.ndarray,
-    X_test:       np.ndarray,
-    y_test:       np.ndarray,
-) -> Dict:
-    """Assess ranking robustness by subsampling the training dataset.
+def load_scaler(scaler_path: str):
+    path = Path(scaler_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Scaler not found: '{path}'")
+    scaler = joblib.load(path)
+    print(f"[scaler] Loaded from '{path}'")
+    return scaler
 
-    In each simulation, cls_train is subsampled at subsample_rate,
-    each model is refitted on the subsample using its best
-    hyperparameters, and weighted recall is evaluated on the fixed
-    test set. Win rate and stability index are reported.
 
-    Best hyperparameters are loaded ONCE before the loop to avoid
-    redundant I/O across 1,000+ simulations.
+def load_best_model_id(results_dir: Path) -> str:
+    path = results_dir / "mcdm_result.json"
+    if not path.exists():
+        raise FileNotFoundError(f"MCDM result not found: '{path}'")
+    with open(path, "r") as f:
+        result = json.load(f)
+    best_model = result["best_model"]
+    print(f"[mcdm] Best model: '{best_model}'")
+    return best_model
 
-    Perturbation method: stratified random subsampling without
-    replacement. StratifiedKFold is not used here — each simulation
-    is an independent subsample to introduce maximum variability.
 
-    Parameters
-    ----------
-    cfg : Dict
-        Full parsed config dictionary.
-    model_keys : List[str]
-        Keys in the classification section of config.yaml.
-    model_names : List[str]
-        Short model identifiers in the same order as model_keys.
-    X_train : np.ndarray
-        Full cls_train feature matrix.
-    y_train : np.ndarray
-        Full cls_train labels.
-    X_test : np.ndarray
-        Fixed test feature matrix — never perturbed.
-    y_test : np.ndarray
-        Fixed test labels.
-
-    Returns
-    -------
-    Dict
-        Keys: nominal_ranking, nominal_scores, win_rates,
-              stability_index, score_mean, score_std, score_matrix.
-    """
-    mc_cfg         = cfg["classification"]["monte_carlo"]
-    n_simulations  = int(mc_cfg["n_simulations"])
-    subsample_rate = float(mc_cfg["subsample_rate"])
-    random_state   = int(mc_cfg["random_state"])
-
-    n_models = len(model_keys)
-    rng      = np.random.default_rng(random_state)
-
-    # Load LabelEncoder for XGBoost (if present)
-    models_dir = Path(cfg["classification"]["models_dir"])
-    le_path    = models_dir / "label_encoder.pkl"
-    le         = joblib.load(le_path) if le_path.exists() else None
-
-    def _decode(model_key: str, y_pred: np.ndarray) -> np.ndarray:
-        if model_key == "xgboost" and le is not None:
-            return le.inverse_transform(y_pred)
-        return y_pred
-
-    # Load best params ONCE — avoids redundant I/O inside the loop
-    best_params = {}
-    for model_key in model_keys:
-        model_id              = cfg["classification"][model_key]["model_id"]
-        best                  = load_model(models_dir, model_id)
-        best_params[model_key] = best.get_params()
-
-    # Nominal scores — weighted recall on full test set (recomputed for consistency)
-    nominal_scores = np.zeros(n_models)
-    for i, model_key in enumerate(model_keys):
-        model_id     = cfg["classification"][model_key]["model_id"]
-        model        = load_model(models_dir, model_id)
-        y_pred       = model.predict(X_test)
-        y_pred       = _decode(model_key, y_pred)
-        nominal_scores[i] = recall_score(
-            y_test, y_pred, average="weighted", zero_division=0
-        )
-
-    nominal_order   = np.argsort(nominal_scores)[::-1]
-    nominal_ranking = [model_names[i] for i in nominal_order]
-
-    # Monte Carlo simulations
-    score_matrix = np.zeros((n_simulations, n_models))
-
-    print(f"\n  Running {n_simulations:,} simulations "
-          f"(subsample_rate={subsample_rate:.0%})...")
-
-    for sim in range(n_simulations):
-        # Stratified subsample — preserve class distribution
-        indices = []
-        for cls in np.unique(y_train):
-            cls_idx = np.where(y_train == cls)[0]
-            n_cls   = max(1, int(len(cls_idx) * subsample_rate))
-            sampled = rng.choice(cls_idx, size=n_cls, replace=False)
-            indices.append(sampled)
-        indices = np.concatenate(indices)
-
-        X_sub = X_train[indices]
-        y_sub = y_train[indices]
-
-        for i, model_key in enumerate(model_keys):
-            if model_key == "xgboost" and le is not None:
-                y_sub_fit = le.transform(y_sub)
-            else:
-                y_sub_fit = y_sub
-
-            # Use pre-loaded params — no load_model() call inside the loop
-            model  = _refit_model(model_key, best_params[model_key], X_sub, y_sub_fit)
-            y_pred = model.predict(X_test)
-            y_pred = _decode(model_key, y_pred)
-            score_matrix[sim, i] = recall_score(
-                y_test, y_pred, average="weighted", zero_division=0
-            )
-
-        if (sim + 1) % 10 == 0:
-            print(f"  [{sim + 1:>4}/{n_simulations}] simulations complete")
-
-    # Win rates
-    winners    = np.argmax(score_matrix, axis=1)
-    win_counts = np.bincount(winners, minlength=n_models)
-    win_rates  = {
-        model_names[i]: float(win_counts[i] / n_simulations * 100)
-        for i in range(n_models)
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
+    classes = sorted(np.unique(np.concatenate([y_true, y_pred])))
+    weighted_recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+    per_class = recall_score(y_true, y_pred, labels=classes, average=None, zero_division=0)
+    cm = confusion_matrix(y_true, y_pred, labels=classes).tolist()
+    return {
+        "weighted_recall": round(float(weighted_recall), 6),
+        "per_class_recall": {cls: round(float(val), 6) for cls, val in zip(classes, per_class)},
+        "confusion_matrix": cm,
+        "classes": classes,
     }
 
-    # Stability index — fraction of simulations matching nominal ranking
-    rank_matrix     = np.argsort(score_matrix, axis=1)[:, ::-1]
-    matches         = np.all(rank_matrix == nominal_order, axis=1)
-    stability_index = float(matches.sum() / n_simulations)
 
-    # Score statistics
-    score_mean = {
-        model_names[i]: float(score_matrix[:, i].mean())
-        for i in range(n_models)
-    }
-    score_std = {
-        model_names[i]: float(score_matrix[:, i].std())
-        for i in range(n_models)
-    }
+# ---------------------------------------------------------------------------
+# Cross‑validation evaluation
+# ---------------------------------------------------------------------------
+def cross_validate_on_real(model, X: np.ndarray, y: np.ndarray, cv_folds: int = 5, random_state: int = 42) -> Dict:
+    classes, counts = np.unique(y, return_counts=True)
+    min_count = min(counts)
+    if min_count < cv_folds:
+        cv_folds = min_count
+        print(f"[cv-eval] Reduced folds to {cv_folds} due to low class frequency.")
+    if cv_folds < 2:
+        raise ValueError("Not enough samples per class for cross‑validation.")
 
-    _print_mc_report(
-        nominal_ranking = nominal_ranking,
-        nominal_scores  = nominal_scores,
-        nominal_order   = nominal_order,
-        win_rates       = win_rates,
-        stability_index = stability_index,
-        score_mean      = score_mean,
-        score_std       = score_std,
-        n_simulations   = n_simulations,
-        subsample_rate  = subsample_rate,
-        model_names     = model_names,
-    )
+    skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    fold_scores = []
+    fold_per_class_recalls = []
+
+    for train_idx, val_idx in skf.split(X, y):
+        X_tr, X_val = X[train_idx], X[val_idx]
+        y_tr, y_val = y[train_idx], y[val_idx]
+
+        model_cls = type(model)
+        new_model = model_cls(**model.get_params())
+        new_model.fit(X_tr, y_tr)
+
+        y_pred = new_model.predict(X_val)
+        w_rec = recall_score(y_val, y_pred, average="weighted", zero_division=0)
+        fold_scores.append(w_rec)
+
+        classes_fold = np.unique(np.concatenate([y_val, y_pred]))
+        per_class = recall_score(y_val, y_pred, labels=classes_fold, average=None, zero_division=0)
+        fold_per_class_recalls.append(dict(zip(classes_fold, per_class)))
+
+    mean_weighted = np.mean(fold_scores)
+    std_weighted = np.std(fold_scores)
+
+    all_classes = set()
+    for d in fold_per_class_recalls:
+        all_classes.update(d.keys())
+    all_classes = sorted(all_classes)
+
+    per_class_mean = {}
+    per_class_std = {}
+    for cls in all_classes:
+        recalls = [d.get(cls, 0.0) for d in fold_per_class_recalls]
+        per_class_mean[cls] = np.mean(recalls)
+        per_class_std[cls] = np.std(recalls)
 
     return {
-        "nominal_ranking": nominal_ranking,
-        "nominal_scores":  nominal_scores.tolist(),
-        "win_rates":       win_rates,
-        "stability_index": stability_index,
-        "score_mean":      score_mean,
-        "score_std":       score_std,
-        "score_matrix":    score_matrix,
-    }
-
-
-def _print_mc_report(
-    nominal_ranking: List[str],
-    nominal_scores:  np.ndarray,
-    nominal_order:   np.ndarray,
-    win_rates:       Dict[str, float],
-    stability_index: float,
-    score_mean:      Dict[str, float],
-    score_std:       Dict[str, float],
-    n_simulations:   int,
-    subsample_rate:  float,
-    model_names:     List[str],
-) -> None:
-    """Print a formatted Monte Carlo robustness summary to stdout."""
-    sep = "=" * 62
-
-    print(f"\n{sep}")
-    print("  MONTE CARLO ROBUSTNESS ANALYSIS  (dataset perturbation)")
-    print(f"  Simulations : {n_simulations:,}   "
-          f"Subsample rate : {subsample_rate:.0%}")
-    print(sep)
-
-    print(f"\n  Nominal ranking (full cls_train, no perturbation):")
-    print(f"  {'-'*50}")
-    for rank, name in enumerate(nominal_ranking, start=1):
-        idx   = model_names.index(name)
-        score = nominal_scores[idx]
-        bar   = "█" * int(score * 60)
-        print(f"  #{rank}  {name:<10s}  weighted_recall = {score:.6f}  {bar}")
-
-    print(f"\n  Win rate per model ({n_simulations:,} simulations):")
-    print(f"  {'-'*50}")
-    for name in nominal_ranking:
-        wr  = win_rates[name]
-        bar = "█" * int(wr / 2)
-        print(f"  {name:<10s}  {wr:6.2f}%  {bar}")
-
-    print(f"\n  Score statistics (mean ± std):")
-    print(f"  {'-'*50}")
-    for name in nominal_ranking:
-        print(f"  {name:<10s}  "
-              f"{score_mean[name]:.6f} ± {score_std[name]:.6f}")
-
-    pct = stability_index * 100
-    if stability_index >= 0.70:
-        verdict = "✅  ROBUST   — ranking stable under data variation"
-    elif stability_index >= 0.50:
-        verdict = "⚠️   MODERATE — ranking changes in some scenarios"
-    else:
-        verdict = "❌  UNSTABLE — ranking sensitive to training data"
-
-    print(f"\n  Stability index : {stability_index:.4f}  ({pct:.1f}% of simulations)")
-    print(f"  Verdict         : {verdict}\n")
-
-
-# ---------------------------------------------------------------------------
-# Save helper
-# ---------------------------------------------------------------------------
-
-def save_mcdm_result(
-    mc_results:       Dict,
-    model_names:      List[str],
-    best_model:       str,
-    selection_reason: str,
-    results_dir:      Path,
-) -> None:
-    """Save the MCDM result to JSON.
-
-    Parameters
-    ----------
-    mc_results : Dict
-        Output of monte_carlo_cls_robustness().
-    model_names : List[str]
-    best_model : str
-        Final selected model.
-    selection_reason : str
-        Human-readable explanation of the selection decision.
-    results_dir : Path
-    """
-    stability = mc_results["stability_index"]
-    if stability >= 0.70:
-        verdict = "ROBUST"
-    elif stability >= 0.50:
-        verdict = "MODERATE"
-    else:
-        verdict = "UNSTABLE"
-
-    report = {
-        "model_names":  model_names,
-        "metric":       "weighted_recall",
-        "ranking": {
-            "nominal":         mc_results["nominal_ranking"],
-            "nominal_scores":  [round(float(s), 6)
-                                for s in mc_results["nominal_scores"]],
-            "win_rates":       {k: round(v, 2)
-                                for k, v in mc_results["win_rates"].items()},
-            "score_mean":      {k: round(v, 6)
-                                for k, v in mc_results["score_mean"].items()},
-            "score_std":       {k: round(v, 6)
-                                for k, v in mc_results["score_std"].items()},
-            "stability_index": round(stability, 4),
-            "verdict":         verdict,
+        "cv_folds": int(cv_folds),
+        "weighted_recall": {"mean": float(mean_weighted), "std": float(std_weighted)},
+        "per_class_recall": {
+            cls: {"mean": float(per_class_mean[cls]), "std": float(per_class_std[cls])}
+            for cls in all_classes
         },
-        "selection_reason": selection_reason,
-        "best_model":       best_model,
     }
 
-    results_dir.mkdir(parents=True, exist_ok=True)
-    out = results_dir / "mcdm_result.json"
-    with open(out, "w", encoding="utf-8") as f:
+
+# ---------------------------------------------------------------------------
+# Save helpers
+# ---------------------------------------------------------------------------
+def save_predictions_csv(df: pd.DataFrame, y_pred: np.ndarray, out_path: Path) -> None:
+    out_df = df.copy()
+    out_df["pred_fault_type"] = y_pred
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_df.to_csv(out_path, sep=";", decimal=",", index=False)
+    print(f"[save] Predictions saved → '{out_path}'")
+
+def save_validation_report(mode: str, model_id: str, metrics: Optional[Dict], n_samples: int, out_path: Path) -> None:
+    report = {"mode": mode, "model_id": model_id, "n_samples": n_samples, "metrics": metrics}
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
         json.dump(report, f, indent=2)
-    print(f"\n[save]  MCDM result saved → '{out}'")
+    print(f"[save] Validation report saved → '{out_path}'")
+
+def save_cv_results(cv_results: Dict, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cv_results_native = convert_to_native(cv_results)
+    with open(out_path, "w") as f:
+        json.dump(cv_results_native, f, indent=2)
+    print(f"[cv-eval] Results saved → '{out_path}'")
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Main
 # ---------------------------------------------------------------------------
-
-def main(config_path: str) -> None:
-    """Full MCDM pipeline for the classification module.
-
-    Steps
-    -----
-    1. Load config, decision matrix, cls_train and cls_test.
-    2. Identify nominal winner (highest weighted recall on full test set).
-    3. Monte Carlo robustness — subsample cls_train, refit, re-evaluate.
-    4. Best model = model with highest Monte Carlo win rate.
-       If the nominal winner has the highest win rate, it is confirmed.
-       If another model dominates in win rate, it overrides the nominal.
-       Ties in win rate fall back to the nominal winner.
-    5. Save result to results/mcdm_result.json.
-
-    Parameters
-    ----------
-    config_path : str
-        Path to config.yaml for the target network.
-    """
+def main(config_path: str, mode: str, input_csv: str, cv_eval: bool) -> None:
     cfg = load_config(config_path)
-
-    network     = cfg["network"]["name"]
-    splits_dir  = Path(cfg["data"]["splits_dir"])
-    cls_cfg     = cfg["classification"]
+    network = cfg["network"]["name"]
+    processed_dir = Path(cfg["data"]["processed_dir"])
+    cls_cfg = cfg["classification"]
+    models_dir = Path(cls_cfg["models_dir"])
     results_dir = Path(cls_cfg["results_dir"])
-    label_col   = "label_classif"
-    model_keys  = ["random_forest", "xgboost", "knn"]
 
-    print(f"\n{'='*62}")
-    print(f"  Classification — MCDM pipeline  [{network}]")
-    print(f"{'='*62}\n")
+    print(f"\n{'='*60}")
+    print(f"  Classification — predict  [{network}]  mode={mode}")
+    print(f"{'='*60}\n")
 
-    # Load decision matrix
-    decision_matrix, model_names, metric_names = load_decision_matrix(results_dir)
+    best_model_id = load_best_model_id(results_dir)
+    model = load_model(models_dir, best_model_id)
 
-    # Load training and test data for Monte Carlo
-    X_train, y_train = load_split(str(splits_dir / "cls_train.csv"), label_col)
-    X_test,  y_test  = load_split(str(splits_dir / "cls_test.csv"),  label_col)
+    filter_sin_falla = (mode == "lab")
+    df, X, y = load_input_csv(input_csv, filter_sin_falla=filter_sin_falla)
 
-    # Step 1 — Nominal winner (highest weighted recall on full test set)
-    print(f"\n{'─'*62}")
-    print("  Step 1 — Nominal winner  (weighted recall on test set)")
-    print(f"{'─'*62}")
-    scores         = decision_matrix[:, 0]
-    nominal_idx    = int(np.argmax(scores))
-    nominal_winner = model_names[nominal_idx]
-
-    for name, score in zip(model_names, scores):
-        marker = "  ←  nominal winner" if name == nominal_winner else ""
-        print(f"  {name:<8}  weighted_recall = {score:.6f}{marker}")
-
-    # Step 2 — Monte Carlo robustness
-    print(f"\n{'─'*62}")
-    print("  Step 2 — Monte Carlo robustness  (dataset perturbation)")
-    print(f"{'─'*62}")
-    mc_results = monte_carlo_cls_robustness(
-        cfg         = cfg,
-        model_keys  = model_keys,
-        model_names = model_names,
-        X_train     = X_train,
-        y_train     = y_train,
-        X_test      = X_test,
-        y_test      = y_test,
-    )
-
-    # Step 3 — Best model: win rate como criterio de selección final
-    print(f"\n{'─'*62}")
-    print("  Step 3 — Best model selection  (win rate)")
-    print(f"{'─'*62}")
-
-    top_win_rate   = max(mc_results["win_rates"].values())
-    top_by_winrate = [m for m, wr in mc_results["win_rates"].items()
-                      if wr == top_win_rate]
-
-    if nominal_winner in top_by_winrate:
-        best_model       = nominal_winner
-        selection_reason = (
-            f"nominal winner confirmed by Monte Carlo "
-            f"(win rate={top_win_rate:.1f}%)"
-        )
-        print(f"  ✅  Nominal winner '{best_model}' confirmed by win rate "
-              f"({top_win_rate:.1f}%).")
+    if mode == "lab":
+        scaler = load_scaler(str(processed_dir / "cls_scaler.pkl"))
+        X_scaled = scaler.transform(X)
+        print(f"[scaler] Applied to {X_scaled.shape[0]:,} samples")
     else:
-        # Empate en win rate también → fallback al nominal winner
-        best_model       = top_by_winrate[0]
-        selection_reason = (
-            f"win rate override: '{best_model}' "
-            f"({mc_results['win_rates'][best_model]:.1f}%) > "
-            f"'{nominal_winner}' "
-            f"({mc_results['win_rates'][nominal_winner]:.1f}%)"
-        )
-        print(f"  ⚠️  Win rate override applied.")
-        print(f"      '{best_model}' ({mc_results['win_rates'][best_model]:.1f}%) "
-              f"> '{nominal_winner}' ({mc_results['win_rates'][nominal_winner]:.1f}%)")
+        X_scaled = X
+        print("[scaler] Skipped — sim input already scaled")
 
-    stability_index = mc_results["stability_index"]
+    if mode == "lab" and cv_eval:
+        if y is None:
+            raise ValueError("Cannot run CV without labels.")
+        print("\n[cv-eval] Running stratified cross‑validation on real data...")
+        cv_results = cross_validate_on_real(model, X_scaled, y)
+        print(f"\n  Weighted recall (CV) = {cv_results['weighted_recall']['mean']:.4f} ± {cv_results['weighted_recall']['std']:.4f}")
+        print("\n  Per‑class recall (mean ± std):")
+        for cls in sorted(cv_results["per_class_recall"].keys()):
+            m = cv_results["per_class_recall"][cls]["mean"]
+            s = cv_results["per_class_recall"][cls]["std"]
+            print(f"    {cls:<15}  {m:.4f} ± {s:.4f}")
+        cv_out = results_dir / f"cv_eval_{Path(input_csv).stem}.json"
+        save_cv_results(cv_results, cv_out)
+        return
 
-    if stability_index < 0.50:
-        print(f"\n  ⚠️  WARNING: stability index = {stability_index:.4f} < 0.50.")
-        print(f"     The ranking is sensitive to training data variation.")
-        print(f"     Review per-class recall in metrics_*.json before deploying.")
+    # Normal inference
+    y_pred = model.predict(X_scaled)
+    pred_classes, pred_counts = np.unique(y_pred, return_counts=True)
+    print(f"\n[predict] {len(y_pred):,} samples classified:")
+    for cls, cnt in zip(pred_classes, pred_counts):
+        print(f"  {cls:<12}  {cnt:>5}  ({cnt/len(y_pred):.1%})")
 
-    print(f"\n{'='*62}")
-    print(f"  Best model       : {best_model}")
-    print(f"  Selection reason : {selection_reason}")
-    print(f"  Stability        : {stability_index:.4f}  "
-          f"({'ROBUST' if stability_index >= 0.70 else 'MODERATE' if stability_index >= 0.50 else 'UNSTABLE'})")
-    print(f"  Win rate         : {mc_results['win_rates'][best_model]:.1f}%")
-    print(f"{'='*62}")
+    metrics = None
+    if y is not None:
+        metrics = compute_metrics(y, y_pred)
+        print(f"\n  Metrics vs ground truth:")
+        print(f"  weighted_recall = {metrics['weighted_recall']:.4f}")
+        print("\n  Per-class recall:")
+        for cls, val in metrics["per_class_recall"].items():
+            print(f"    {cls:<12}  {val:.4f}")
 
-    save_mcdm_result(
-        mc_results       = mc_results,
-        model_names      = model_names,
-        best_model       = best_model,
-        selection_reason = selection_reason,
-        results_dir      = results_dir,
-    )
-
-    print(f"\n[done]  MCDM pipeline complete for {network}.")
-    print(f"        Results → '{results_dir}'\n")
+    input_stem = Path(input_csv).stem
+    pred_path = results_dir / f"predictions_{mode}_{input_stem}.csv"
+    report_path = results_dir / f"validation_{mode}_{input_stem}.json"
+    save_predictions_csv(df, y_pred, pred_path)
+    save_validation_report(mode, best_model_id, metrics, len(y_pred), report_path)
+    print(f"\n[done] Prediction complete for {network}.\n")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run MCDM pipeline (Monte Carlo) for the fault "
-                    "classification module."
-    )
-    parser.add_argument(
-        "--config",
-        type     = str,
-        required = True,
-        help     = "Path to config.yaml (e.g. 'ieee13/config.yaml')",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--mode", required=True, choices=["sim", "lab"])
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--cv-eval", action="store_true")
     args = parser.parse_args()
-
+    if args.cv_eval and args.mode != "lab":
+        print("[ERROR] --cv-eval only for --mode lab", file=sys.stderr)
+        sys.exit(1)
     try:
-        main(args.config)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"\n[ERROR] {exc}", file=sys.stderr)
+        main(args.config, args.mode, args.input, args.cv_eval)
+    except Exception as e:
+        print(f"\n[ERROR] {e}", file=sys.stderr)
+        sys.exit(1)

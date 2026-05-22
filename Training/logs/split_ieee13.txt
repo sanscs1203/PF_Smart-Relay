@@ -4,26 +4,26 @@
 ============================================================
 
 --- DET module  (label_detection) ---
-[load]  'detection_data.csv'  →  66,832 rows, 12 features
-  Train:  46,782  (70.0%)  |  fault=85.0%  no-fault=15.0%
-  Val  :  10,025  (15.0%)  |  fault=85.0%  no-fault=15.0%
-  Test :  10,025  (15.0%)  |  fault=85.0%  no-fault=15.0%
+[load]  'detection_data.csv'  →  4,200 rows, 6 features
+  Train:   2,939  (70.0%)  |  fault=50.0%  no-fault=50.0%
+  Val  :     630  (15.0%)  |  fault=50.0%  no-fault=50.0%
+  Test :     631  (15.0%)  |  fault=49.9%  no-fault=50.1%
 [scaler] fitted on train set and saved to 'data/processed/ieee13/det_scaler.pkl'
 [save]  Writing split files...
-  → saved   46,782 rows  'data/splits/ieee13/det_train.csv'
-  → saved   10,025 rows  'data/splits/ieee13/det_val.csv'
-  → saved   10,025 rows  'data/splits/ieee13/det_test.csv'
+  → saved    2,939 rows  'data/splits/ieee13/det_train.csv'
+  → saved      630 rows  'data/splits/ieee13/det_val.csv'
+  → saved      631 rows  'data/splits/ieee13/det_test.csv'
 
 --- CLS module  (label_classif) ---
-[load]  'classif_data.csv'  →  56,832 rows, 12 features
-  Train:  39,782  (70.0%)
-  Val  :   8,525  (15.0%)
-  Test :   8,525  (15.0%)
+[load]  'classif_data.csv'  →  6,505 rows, 6 features
+  Train:   4,553  (70.0%)
+  Val  :     976  (15.0%)
+  Test :     976  (15.0%)
 [scaler] fitted on train set and saved to 'data/processed/ieee13/cls_scaler.pkl'
 [save]  Writing split files...
-  → saved   39,782 rows  'data/splits/ieee13/cls_train.csv'
-  → saved    8,525 rows  'data/splits/ieee13/cls_val.csv'
-  → saved    8,525 rows  'data/splits/ieee13/cls_test.csv'
+  → saved    4,553 rows  'data/splits/ieee13/cls_train.csv'
+  → saved      976 rows  'data/splits/ieee13/cls_val.csv'
+  → saved      976 rows  'data/splits/ieee13/cls_test.csv'
 
 [done]  Split pipeline complete for IEEE 13-BUS.
         Splits saved to: 'data/splits/ieee13'

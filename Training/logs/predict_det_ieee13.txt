@@ -1,25 +1,28 @@
 
 ============================================================
-  Detection — predict  [IEEE 13-Bus]  mode=sim
+  Detection — predict  [IEEE 13-Bus]  mode=lab
 ============================================================
 
-[mcdm]  Best model from mcdm_result.json: 'SVM'
-[threshold] Optimal threshold for SVM: 0.10
-[load]  Model 'SVM' loaded from 'ieee13/detection/models/SVM.pkl'
-[load]  'det_test.csv'  →  10,025 samples  (labels present: fault=85.0%  no-fault=15.0%)
-[scaler] Applied to 10,025 samples
-[predict] fault=8525  no-fault=1500  (threshold=0.10)
+[mcdm] Best model: 'RF'
+[load]  Model 'RF' loaded from 'ieee13/detection/models/RF.pkl'
+[load]  'lab_data.csv'  → 136 samples (labels from 'Fases_en_Falla': fault=65.4%)
+[scaler] Loaded from 'data/processed/ieee13/det_scaler.pkl'
+[scaler] Applied to 136 samples
 
-  Metrics vs ground truth:
-  recall      = 1.0000
-  specificity = 1.0000
-  ahp_score   = 1.0000
-  confusion matrix:
-    TN=1500  FP=0
-    FN=0  TP=8525
-[save]  Predictions saved → 'ieee13/detection/results/predictions_sim_det_test.csv'
-[save]  Validation report saved → 'ieee13/detection/results/validation_sim_det_test.json'
+[threshold] Running NESTED CROSS-VALIDATION for unbiased evaluation...
 
-[done]  Prediction complete for IEEE 13-Bus  (mode=sim).
-        Results → 'ieee13/detection/results'
+[nested-cv] Results saved to 'ieee13/detection/results/nested_cv_results.json'
+  Recall       = 0.8542 ± 0.0748
+  Specificity  = 0.5911 ± 0.1394
+  G-mean       = 0.7040 ± 0.0956
+  AHP score    = 0.7885 ± 0.0655
+  Threshold    = 0.6800 ± 0.0000
+  Thresholds per outer fold: ['0.68', '0.68', '0.68', '0.68', '0.68']
 
+  Average confusion matrix (counts, over outer folds):
+    TN=5.6  FP=3.8
+    FN=2.6  TP=15.2
+
+  Average confusion matrix (percentages):
+    TN=20.6%  FP=14.0%
+    FN=9.6%  TP=55.9%

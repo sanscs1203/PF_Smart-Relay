@@ -1,302 +1,182 @@
 """
 utils/preprocess.py
 -------------------
-Loads a raw dataset CSV, validates its structure, and produces two
-processed output files:
- 
-  - detection_data.csv  : features (X) + binary label (fault / no-fault)
-  - classif_data.csv    : features (X) + multiclass label (fault type only,
-                          Sin_Falla rows excluded)
- 
-This script does NOT fit or apply any scaler. Scaling is handled
-downstream in utils/split.py after the train/val/test split is created,
-to prevent data leakage.
- 
-Usage (called from project root):
-    python3 utils/preprocess.py --config ieee5/config.yaml
-    python3 utils/preprocess.py --config ieee13/config.yaml
+Preprocesa el dataset simulado de IEEE 13-bus.
+Aplica filtros de resistencia (100 Ω) y eliminación de fallas LLG/LLL con 25 Ω.
+Luego submuestreo estratificado (opcional) y balanceo a proporción fault/no-fault ajustable.
 """
- 
+
 import argparse
 import sys
-import yaml
-import pandas as pd
-import numpy as np
 from pathlib import Path
 
-# ---------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------
+import numpy as np
+import pandas as pd
+import yaml
+from sklearn.model_selection import train_test_split
 
-# Exact features column names
-FEATURE_COLS = [
-    "Va", "Vb", "Vc",
-    "phi_Va", "phi_Vb", "phi_Vc",
-    "Ia", "Ib", "Ic",
-    "phi_Ia", "phi_Ib", "phi_Ic",
-]
-
-# Label used in the raw dataset to indicate no-fault condition
+# ----------------------------------------------------------------------
+# CONSTANTES
+# ----------------------------------------------------------------------
+FEATURE_COLS = ["Va", "Vb", "Vc", "Ia", "Ib", "Ic"]
 NO_FAULT_LABEL = "Sin_Falla"
-
-# Binary label for detection task
 DETECTION_LABEL_COL = "label_detection"
-
-# Multiclass label column name written to classif_data.csv
 CLASSIF_LABEL_COL = "label_classif"
 
-# ------------------------------------------------------------------
-# I/O Functions
-# ------------------------------------------------------------------
-
-def load_config(config_path: str) -> dict:
-    """Load a YAML configuration file.
- 
-    Parameters
-    ----------
-    config_path : str
-        Path to the config.yaml file (e.g. 'ieee5/config.yaml').
- 
-    Returns
-    -------
-    dict
-        Parsed configuration dictionary.
-    """
-    path = Path(config_path)
-    if not path.exists():    
-        raise FileNotFoundError(f"Config file not found: {path}")
-    with open(path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-    
-def load_raw_data(raw_csv_path: str) -> pd.DataFrame:
-    """Read the raw dataset CSV with the project-standard format.
- 
-    The CSV uses semicolon (;) as separator and comma (,) as decimal.
- 
-    Parameters
-    ----------
-    raw_csv_path : str
-        Path to the raw CSV file.
- 
-    Returns
-    -------
-    pd.DataFrame
-        Raw dataframe with all original columns.
-    """
-    path = Path(raw_csv_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Raw dataset CSV not found: {path}")
-    
-    df = pd.read_csv(path, sep=';', decimal=',')
-    print(f"[load] Read {len(df):,} rows from '{path}'")
+# ----------------------------------------------------------------------
+# FILTROS
+# ----------------------------------------------------------------------
+def filter_100_ohm_resistance(df):
+    """Elimina filas con resistencia = 100 Ω."""
+    if 'Resistencia_Falla' not in df.columns:
+        return df
+    df = df.copy()
+    resist = pd.to_numeric(df['Resistencia_Falla'].astype(str).str.replace(',','.'), errors='coerce')
+    before = len(df)
+    df = df[(resist != 100) | (pd.isna(resist))]
+    print(f"[filter] Eliminadas {before - len(df)} filas con resistencia = 100 Ω")
     return df
 
-# ---------------------------------------------------------------
-# Validation Functions
-# ---------------------------------------------------------------
+def filter_llg_lll_resistance_25(df):
+    """Elimina fallas LLG AB, LLG BC, LLG CA, LLL ABC con resistencia = 25 Ω."""
+    if 'Resistencia_Falla' not in df.columns or 'Tipo_Falla' not in df.columns:
+        return df
+    df = df.copy()
+    resist = pd.to_numeric(df['Resistencia_Falla'].astype(str).str.replace(',','.'), errors='coerce')
+    fault_types = ['LLG AB', 'LLG BC', 'LLG CA', 'LLL ABC']
+    mask = df['Tipo_Falla'].isin(fault_types) & (resist == 25)
+    before = len(df)
+    df = df[~mask]
+    print(f"[filter] Eliminadas {before - len(df)} filas con fallas {fault_types} y resistencia=25Ω")
+    return df
 
-def validate_dataframe(df: pd.DataFrame, config: dict) -> None:
-    """Run basic sanity checks on the raw dataframe.
- 
-    Checks performed:
-      1. All expected feature columns are present.
-      2. The fault-type column ('Tipo_Falla') is present.
-      3. No NaN values exist in feature or label columns.
-      4. All Tipo_Falla values are among the known set.
-      5. Class distribution is printed for manual inspection.
- 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Raw dataframe loaded from CSV.
-    config : dict
-        Parsed config.yaml; used to read the list of valid fault types.
- 
-    Raises
-    ------
-    ValueError
-        If any critical check fails.
-    """
-    print("\n[validate] Running dataset validation...")
-    
-    # Feature columns check
-    missing_features = [col for col in FEATURE_COLS if col not in df.columns]
-    if missing_features:
-        raise ValueError(f"Missing feature columns: {missing_features}")
-    print(f" All {len(FEATURE_COLS)} feature columns are present.")
-    
-    # Label column check
-    if 'Tipo_Falla' not in df.columns:
-        raise ValueError("Missing label column: 'Tipo_Falla'")
-    print(" Label column 'Tipo_Falla' is present.")
-    
-    # NaN check
-    cols_to_check = FEATURE_COLS + ['Tipo_Falla']
-    nan_counts = df[cols_to_check].isna().sum()
-    cols_with_nans = nan_counts[nan_counts > 0]
-    if not cols_with_nans.empty:
-        raise ValueError(f"NaN values found in columns:\n{cols_with_nans}")
-    print(" No NaN values found in features or labels.")
-    
-    # Valid fault types check
-    valid_types = set(config["data"]["fault_types"] + [NO_FAULT_LABEL])
-    unknown_types = set(df["Tipo_Falla"].unique()) - valid_types
-    if unknown_types:
-        raise ValueError(f"Unknown fault types found in 'Tipo_Falla': {unknown_types}")
-    print(f" All fault types in 'Tipo_Falla' are valid: {valid_types}")
-    
-    # Class distribution
-    print("\n Class distribution in 'Tipo_Falla':")
-    dist = df["Tipo_Falla"].value_counts()
-    for label, count in dist.items():
-        pct = 100 * count / len(df)
-        print(f"  {label:<15} {count:>7,}  ({pct:5.1f}%)")
-    print()
-    
-# ---------------------------------------------------------------
-# Processing Functions
-# ---------------------------------------------------------------
+# ----------------------------------------------------------------------
+# SUBMUESTREO ESTRATIFICADO
+# ----------------------------------------------------------------------
+def stratified_subsample(df, target_fraction, target_col='Tipo_Falla', random_state=42):
+    if target_fraction >= 1.0:
+        return df
+    df = df.copy()
+    y = df[target_col].astype(str)
+    _, df_sampled = train_test_split(df, test_size=target_fraction, stratify=y, random_state=random_state)
+    print(f"[subsample] Reducido de {len(df)} a {len(df_sampled)} filas ({target_fraction*100:.0f}%)")
+    return df_sampled
 
-def build_detection_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Create the binary-labeled dataset for the detection module.
- 
-    Label encoding:
-      Sin_Falla → 0  (no fault)
-      any other → 1  (fault)
- 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Validated raw dataframe.
- 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with columns: [FEATURE_COLS..., DETECTION_LABEL_COL]
-    """
-    det = df[FEATURE_COLS].copy()
-    det[DETECTION_LABEL_COL] = (df["Tipo_Falla"] != NO_FAULT_LABEL).astype(int)
-    
-    n_fault = det[DETECTION_LABEL_COL].sum()
-    n_no_fault = len(det) - n_fault
-    print(f"[detection]  Total rows : {len(det):,}")
-    print(f"             No-fault (0): {n_no_fault:,}")
-    print(f"             Fault    (1): {n_fault:,}")
-    return det
+# ----------------------------------------------------------------------
+# BALANCEO (ajustable por fault_multiplier)
+# ----------------------------------------------------------------------
+def balance_detection_data(df, fault_multiplier=1.0, random_state=42):
+    """Balancea el dataset de detección a una proporción fault/no-fault = fault_multiplier."""
+    np.random.seed(random_state)
+    load_cols = [c for c in ["Carga_645", "Carga_671", "Carga_675", "Carga_611"] if c in df.columns]
+    df_no_fault = df[df["Tipo_Falla"] == NO_FAULT_LABEL].copy()
+    df_fault = df[df["Tipo_Falla"] != NO_FAULT_LABEL].copy()
+    n_no_fault = len(df_no_fault)
+    n_fault_target = int(n_no_fault * fault_multiplier)
+    print(f"\n[balance] Original no-fault: {n_no_fault}, fault: {len(df_fault)}")
+    print(f"[balance] Target fault rows: {n_fault_target} (multiplier {fault_multiplier})")
+    if len(df_fault) > n_fault_target:
+        fault_types = df_fault["Tipo_Falla"].unique()
+        samples_per_type = n_fault_target // len(fault_types)
+        remainder = n_fault_target % len(fault_types)
+        sampled_faults = []
+        for ft in fault_types:
+            ft_df = df_fault[df_fault["Tipo_Falla"] == ft]
+            n_take = samples_per_type + (1 if remainder > 0 else 0)
+            remainder -= 1
+            if len(ft_df) > n_take:
+                sampled_faults.append(ft_df.sample(n=n_take, random_state=random_state))
+            else:
+                sampled_faults.append(ft_df)
+        df_fault_balanced = pd.concat(sampled_faults, ignore_index=True)
+    else:
+        df_fault_balanced = df_fault
+    det = pd.concat([df_no_fault, df_fault_balanced], ignore_index=True)
+    det[DETECTION_LABEL_COL] = (det["Tipo_Falla"] != NO_FAULT_LABEL).astype(int)
+    det = det.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    final_fault = det[DETECTION_LABEL_COL].sum()
+    final_no_fault = len(det) - final_fault
+    print(f"[balance] Final: no-fault={final_no_fault}, fault={final_fault} (ratio {final_fault/final_no_fault:.2f})")
+    out_cols = FEATURE_COLS + [DETECTION_LABEL_COL] + load_cols
+    return det[out_cols]
 
-def build_classif_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Create the multiclass-labeled dataset for the classification module.
- 
-    Only fault rows are included (Sin_Falla rows are excluded).
-    The fault-type string is preserved as the label.
-    
-    This dataset includes only the 12 original features (no residual
-    currents are computed).
- 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Validated raw dataframe.
- 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with columns: [FEATURE_COLS..., CLASSIF_LABEL_COL]
-        Only rows where Tipo_Falla != 'Sin_Falla'.
-    """
+# ----------------------------------------------------------------------
+# DATOS PARA CLASIFICACIÓN (solo fallas)
+# ----------------------------------------------------------------------
+def build_classif_data(df):
     fault_mask = df["Tipo_Falla"] != NO_FAULT_LABEL
     cls = df.loc[fault_mask, FEATURE_COLS].copy()
-    
-    # Add classification label
     cls[CLASSIF_LABEL_COL] = df.loc[fault_mask, "Tipo_Falla"].values
-    
-    print(f"[classif]    Total rows (fault only): {len(cls):,}")
-    print(f"             Unique fault types      : {cls[CLASSIF_LABEL_COL].nunique()}")
-    print(f"             Features                : {len(FEATURE_COLS)} (original set)")
+    print(f"[classif] Fault only: {len(cls)} rows, {cls[CLASSIF_LABEL_COL].nunique()} types")
     return cls
 
-# ---------------------------------------------------------------
-# Save helpers
-# ---------------------------------------------------------------
+# ----------------------------------------------------------------------
+# I/O
+# ----------------------------------------------------------------------
+def load_config(config_path: str):
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
-def save_csv(df: pd.DataFrame, out_path: str) -> None:
-    """Save a processed dataframe to CSV using the project standard format.
- 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataframe to save.
-    out_path : Path
-        Destination file path. Parent directories are created if needed.
-    """
+def load_raw_data(raw_csv_path: str):
+    df = pd.read_csv(raw_csv_path, sep=";", decimal=",", low_memory=False)
+    print(f"[load] Read {len(df):,} rows from '{raw_csv_path}'")
+    return df
+
+def save_csv(df, out_path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Use semicolon separator and comma decimal to stay consistent with raw
     df.to_csv(out_path, sep=";", decimal=",", index=False)
-    print(f"[save]  Saved {len(df):,} rows → '{out_path}'")
+    print(f"[save] Saved {len(df):,} rows -> '{out_path}'")
 
-# ---------------------------------------------------------------
-# Main function
-# ---------------------------------------------------------------
-
-def main(config_path: str) -> None:
-    """Full preprocessing pipeline for one network (ieee5 or ieee13).
- 
-    Steps:
-      1. Load config.yaml
-      2. Load raw CSV
-      3. Validate structure and content
-      4. Build detection_data.csv  (binary labels)
-      5. Build classif_data.csv    (multiclass labels, fault rows only)
-      6. Save both to data/processed/<network>/
- 
-    Parameters
-    ----------
-    config_path : str
-        Path to the config.yaml for the target network.
-    """
-    
-    # Load config
+# ----------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------
+def main(config_path, subsample_fraction=1.0, fault_multiplier=1.0):
     config = load_config(config_path)
     network = config["network"]["name"]
     raw_csv = config["data"]["raw_csv"]
     processed_dir = Path(config["data"]["processed_dir"])
-    
-    print(f"{'='*60}")
+
+    print(f"\n{'='*60}")
     print(f"  Preprocessing pipeline — {network.upper()}")
+    print(f"  Subsample fraction: {subsample_fraction}  |  Fault multiplier: {fault_multiplier}")
     print(f"{'='*60}\n")
-    
-    # Load
+
+    # Cargar datos simulados
     df = load_raw_data(raw_csv)
-    
-    # Validate
-    validate_dataframe(df, config)
-    
-    # Build processed datasets
-    det_df = build_detection_data(df)
+    df = filter_100_ohm_resistance(df)
+    df = filter_llg_lll_resistance_25(df)
+
+    # Submuestreo estratificado (si se solicita)
+    if subsample_fraction < 1.0:
+        df = stratified_subsample(df, target_fraction=subsample_fraction, target_col='Tipo_Falla')
+
+    # Balanceo a la proporción deseada
+    det_df = balance_detection_data(df, fault_multiplier=fault_multiplier)
+
+    # Datos para clasificación multiclase (solo fallas)
     cls_df = build_classif_data(df)
-    
-    # Save outputs
+
+    # Guardar
     save_csv(det_df, processed_dir / "detection_data.csv")
     save_csv(cls_df, processed_dir / "classif_data.csv")
- 
-    print(f"\n[done]  Preprocessing complete for {network.upper()}.")
-    print(f"        Output directory: '{processed_dir}'\n")
-    
+
+    print(f"\n[done] Preprocessing complete.\n")
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Preprocess raw fault dataset into detection and classification CSVs."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Path to config.yaml (e.g. 'ieee5/config.yaml')",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--subsample-fraction", type=float, default=1.0,
+                        help="Fraction of total data to keep (stratified, default=1.0)")
+    parser.add_argument("--fault-multiplier", type=float, default=1.0,
+                        help="Ratio fault/no-fault in detection dataset (default=1.0 for 1:1)")
     args = parser.parse_args()
- 
+
+    if not (0 < args.subsample_fraction <= 1.0):
+        print("[ERROR] subsample-fraction must be in (0,1]", file=sys.stderr)
+        sys.exit(1)
+
     try:
-        main(args.config)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"\n[ERROR] {exc}", file=sys.stderr)
+        main(args.config, args.subsample_fraction, args.fault_multiplier)
+    except Exception as e:
+        print(f"\n[ERROR] {e}", file=sys.stderr)
         sys.exit(1)

@@ -300,14 +300,9 @@ def main(config_path: str) -> None:
         random_seed     = mc_cfg["random_seed"],
     )
  
-    nominal_winner  = mc_results["nominal_ranking"][0]    
-    stability_index = mc_results["stability_index"]
     
     nominal_winner = max(model_names, key=lambda m: mc_results["win_rates"][m])
-    
-    top_win_rate = mc_results["win_rates"][nominal_winner]
-    if list(mc_results["win_rates"].values()).count(top_win_rate) > 1:
-        nominal_winner = mc_results["nominal_ranking"][0]
+    stability_index = mc_results["stability_index"]
  
     # Step 3 — Dependability override
     print(f"\n{'─'*62}")

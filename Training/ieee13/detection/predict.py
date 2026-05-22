@@ -1,49 +1,5 @@
 """
-ieee13/detection/predict.py
----------------------------
-Runs inference with the best detection model selected by mcdm.py.
-
-Two operating modes
--------------------
---mode sim  (simulation)
-    Input : any CSV with the 12 electrical features + optional label column.
-            Typically used with det_test.csv to verify the pipeline end-to-end.
-    Output: predictions CSV + optional metrics report (if labels present).
-
---mode lab  (laboratory validation)
-    Input : CSV with the 12 electrical features + label column (known fault
-            type recorded during physical lab experiments).
-            Features are magnitudes and phase angles derived via FFT from
-            real sensor measurements — same 12-column format as simulation.
-    Output: predictions CSV + validation report JSON comparing predictions
-            against real lab labels.
-            The same det_scaler.pkl trained on simulation data is applied
-            (scale assumed comparable between simulation and lab).
-
-In both modes the pipeline is identical:
-    1. Load best model from mcdm_result.json → models/<model_id>.pkl
-    2. Load and apply det_scaler.pkl (transform only — never refit)
-    3. Predict labels and probabilities
-    4. If labels present → compute metrics and save report
-
-Utility modules used
----------------------
-- utils.io.load_config()   : load YAML config
-- utils.io.load_model()    : load fitted model from .pkl
-
-Usage (called from project root)
----------------------------------
-    # Simulation mode (e.g. verify on test set)
-    python3 ieee13/detection/predict.py \\
-        --config ieee13/config.yaml \\
-        --mode sim \\
-        --input data/splits/ieee13/det_test.csv
-
-    # Laboratory validation mode
-    python3 ieee13/detection/predict.py \\
-        --config ieee13/config.yaml \\
-        --mode lab \\
-        --input path/to/lab_dataset.csv
+ieee13/detection/predict.py (con nested CV, matriz de confusión y umbrales)
 """
 
 import argparse
@@ -55,383 +11,272 @@ from typing import Dict, Optional, Tuple
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    confusion_matrix,
-    recall_score
-)
+from sklearn.metrics import confusion_matrix, recall_score
 
-# Add project root to path so utils/ is importable regardless of cwd
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from utils.io import load_config, load_model
 
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-FEATURE_COLS = [
-    "Va", "Vb", "Vc",
-    "phi_Va", "phi_Vb", "phi_Vc",
-    "Ia", "Ib", "Ic",
-    "phi_Ia", "phi_Ib", "phi_Ic",
-]
-
+FEATURE_COLS = ["Va", "Vb", "Vc", "Ia", "Ib", "Ic"]
 DETECTION_LABEL_COL = "label_detection"
 
+# ----------------------------------------------------------------------
+# Conversión de etiquetas
+# ----------------------------------------------------------------------
+def to_binary_label(series, source_col: str) -> np.ndarray:
+    if source_col == DETECTION_LABEL_COL:
+        return series.values
+    elif source_col in ("Fases_en_Falla", "Tipo_Falla"):
+        return (series != "Sin_Falla").astype(int).values
+    else:
+        raise ValueError(f"No sé cómo convertir {source_col}")
 
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
-def load_input_csv(
-    csv_path: str,
-) -> Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]:
-    """Load an input CSV and separate features from label (if present).
-
-    The CSV must contain the 12 electrical feature columns. The label
-    column (label_detection) is optional — if absent, metrics cannot
-    be computed but predictions are still produced.
-
-    Parameters
-    ----------
-    csv_path : str
-        Path to the input CSV file.
-
-    Returns
-    -------
-    Tuple[pd.DataFrame, np.ndarray, Optional[np.ndarray]]
-        (original dataframe, feature matrix X, label vector y or None)
-
-    Raises
-    ------
-    FileNotFoundError
-        If the CSV does not exist.
-    ValueError
-        If any of the 6 expected feature columns are missing.
-    """
+# ----------------------------------------------------------------------
+# Carga de CSV (con filtro opcional de resistencia 100Ω)
+# ----------------------------------------------------------------------
+def load_input_csv(csv_path: str, filter_resistance: bool = False):
     path = Path(csv_path)
     if not path.exists():
         raise FileNotFoundError(f"Input CSV not found: {path}")
-
     df = pd.read_csv(path, sep=";", decimal=",")
-
-    # Validate feature columns
+    if filter_resistance and 'Resistencia_Falla' in df.columns:
+        resist = pd.to_numeric(df['Resistencia_Falla'].astype(str).str.replace(',','.'), errors='coerce')
+        before = len(df)
+        df = df[(resist != 100) | (pd.isna(resist))]
+        removed = before - len(df)
+        if removed > 0:
+            print(f"[filter] Eliminadas {removed} filas con resistencia = 100 Ω")
     missing = [c for c in FEATURE_COLS if c not in df.columns]
     if missing:
-        raise ValueError(f"Missing feature columns in input CSV: {missing}")
-
+        raise ValueError(f"Missing feature columns: {missing}")
     X = df[FEATURE_COLS].values
-
-    # Label column is optional
-    y = None
+    label_col = None
     if DETECTION_LABEL_COL in df.columns:
-        y = df[DETECTION_LABEL_COL].values
-        print(f"[load]  '{path.name}'  →  {X.shape[0]:,} samples  "
-              f"(labels present: fault={y.mean():.1%}  "
-              f"no-fault={1-y.mean():.1%})")
+        label_col = DETECTION_LABEL_COL
+    elif "Fases_en_Falla" in df.columns:
+        label_col = "Fases_en_Falla"
+    elif "Tipo_Falla" in df.columns:
+        label_col = "Tipo_Falla"
+    y = None
+    if label_col is not None:
+        y = to_binary_label(df[label_col], label_col)
+        fault_rate = y.mean()
+        print(f"[load]  '{path.name}'  → {X.shape[0]} samples (labels from '{label_col}': fault={fault_rate:.1%})")
     else:
-        print(f"[load]  '{path.name}'  →  {X.shape[0]:,} samples  "
-              f"(no label column — metrics will not be computed)")
-
+        print(f"[load]  '{path.name}'  → {X.shape[0]} samples (no labels)")
     return df, X, y
 
-
 def load_scaler(scaler_path: str):
-    """Load the pre-fitted StandardScaler from disk.
-
-    Parameters
-    ----------
-    scaler_path : str
-        Path to det_scaler.pkl.
-
-    Returns
-    -------
-    StandardScaler
-        The fitted scaler instance.
-
-    Raises
-    ------
-    FileNotFoundError
-        If det_scaler.pkl does not exist.
-    """
     path = Path(scaler_path)
     if not path.exists():
-        raise FileNotFoundError(
-            f"Scaler not found: {path}\n"
-            "Run utils/split.py first."
-        )
+        raise FileNotFoundError(f"Scaler not found: {path}")
     scaler = joblib.load(path)
     print(f"[scaler] Loaded from '{path}'")
     return scaler
 
-
-def load_best_model_id(results_dir: Path) -> Tuple[str, np.ndarray]:
-    """Read the best model identifier and AHP weights from mcdm_result.json.
-
-    Parameters
-    ----------
-    results_dir : Path
-        Directory containing mcdm_result.json.
-
-    Returns
-    -------
-    Tuple[str, np.ndarray]
-        (best model identifier, AHP weight vector)
-
-    Raises
-    ------
-    FileNotFoundError
-        If mcdm_result.json does not exist.
-    """
+def load_best_model_id(results_dir: Path):
     path = results_dir / "mcdm_result.json"
     if not path.exists():
-        raise FileNotFoundError(
-            f"MCDM result not found: {path}\n"
-            "Run ieee13/detection/mcdm.py first."
-        )
-    with open(path, "r", encoding="utf-8") as f:
+        raise FileNotFoundError(f"MCDM result not found: {path}")
+    with open(path) as f:
         result = json.load(f)
-
     best_model = result["best_model"]
-    w_ahp      = np.array(result["weights"]["ahp"])
-    print(f"[mcdm]  Best model from mcdm_result.json: '{best_model}'")
+    w_ahp = np.array(result["weights"]["ahp"])
+    print(f"[mcdm] Best model: '{best_model}'")
     return best_model, w_ahp
 
-
 def load_threshold(results_dir: Path, model_id: str) -> float:
-    """Read the optimal threshold for the best model from metrics JSON.
-
-    Parameters
-    ----------
-    results_dir : Path
-        Directory containing metrics_<model_id>.json.
-    model_id : str
-        Model identifier.
-
-    Returns
-    -------
-    float
-        Optimal decision threshold selected on the val set.
-
-    Raises
-    ------
-    FileNotFoundError
-        If metrics_<model_id>.json does not exist.
-    """
     path = results_dir / f"metrics_{model_id}.json"
     if not path.exists():
-        raise FileNotFoundError(
-            f"Metrics file not found: {path}\n"
-            "Run ieee13/detection/evaluate.py first."
-        )
-    with open(path, "r", encoding="utf-8") as f:
+        raise FileNotFoundError(f"Metrics file not found: {path}")
+    with open(path) as f:
         metrics = json.load(f)
-
     threshold = metrics["optimal_threshold"]
     print(f"[threshold] Optimal threshold for {model_id}: {threshold:.2f}")
     return float(threshold)
 
+# ----------------------------------------------------------------------
+# Optimización de umbral con CV simple
+# ----------------------------------------------------------------------
+def optimize_threshold_cv(model, X: np.ndarray, y: np.ndarray, scaler,
+                          cv_folds: int = 5, n_thresholds: int = 41,
+                          random_state: int = 42) -> Tuple[float, Dict]:
+    from sklearn.model_selection import StratifiedKFold
+    thresholds = np.linspace(0.10, 0.90, n_thresholds)
+    skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    cv_scores = []
+    for th in thresholds:
+        fold_scores = []
+        for train_idx, val_idx in skf.split(X, y):
+            X_val_scaled = scaler.transform(X[val_idx])
+            y_prob = model.predict_proba(X_val_scaled)[:, 1]
+            y_pred = (y_prob >= th).astype(int)
+            recall = recall_score(y[val_idx], y_pred, pos_label=1, zero_division=0)
+            spec = recall_score(y[val_idx], y_pred, pos_label=0, zero_division=0)
+            gmean = np.sqrt(recall * spec) if (recall * spec) > 0 else 0.0
+            fold_scores.append(gmean)
+        cv_scores.append(np.mean(fold_scores))
+    best_idx = np.argmax(cv_scores)
+    best_th = thresholds[best_idx]
+    return best_th, {"best_threshold": float(best_th), "best_gmean": float(cv_scores[best_idx])}
 
-# ---------------------------------------------------------------------------
-# Inference
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Validación cruzada anidada (nested CV) con matriz de confusión promedio
+# ----------------------------------------------------------------------
+def nested_cv_evaluate(model, X: np.ndarray, y: np.ndarray, scaler, w_ahp: np.ndarray,
+                       outer_folds: int = 5, inner_folds: int = 5,
+                       n_thresholds: int = 41, random_state: int = 42) -> Dict:
+    from sklearn.model_selection import StratifiedKFold
+    outer_skf = StratifiedKFold(n_splits=outer_folds, shuffle=True, random_state=random_state)
+    outer_recalls = []
+    outer_specs = []
+    outer_gmeans = []
+    outer_ahp = []
+    outer_thresholds = []
+    cm_sum = np.zeros((2, 2), dtype=int)
 
-def predict(
-    model,
-    X_scaled:  np.ndarray,
-    threshold: float,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Run inference and apply the optimal decision threshold.
+    for train_idx, test_idx in outer_skf.split(X, y):
+        X_train_inner = X[train_idx]
+        y_train_inner = y[train_idx]
+        X_test_outer = X[test_idx]
+        y_test_outer = y[test_idx]
 
-    Parameters
-    ----------
-    model : fitted sklearn estimator
-    X_scaled : np.ndarray
-        Already-scaled feature matrix.
-    threshold : float
-        Decision threshold (probability ≥ threshold → fault = 1).
+        best_th, _ = optimize_threshold_cv(model, X_train_inner, y_train_inner, scaler,
+                                           cv_folds=inner_folds, n_thresholds=n_thresholds,
+                                           random_state=random_state)
 
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        (predicted labels, positive-class probabilities)
-    """
+        X_test_scaled = scaler.transform(X_test_outer)
+        y_prob = model.predict_proba(X_test_scaled)[:, 1]
+        y_pred = (y_prob >= best_th).astype(int)
+
+        recall = recall_score(y_test_outer, y_pred, pos_label=1, zero_division=0)
+        spec = recall_score(y_test_outer, y_pred, pos_label=0, zero_division=0)
+        gmean = np.sqrt(recall * spec) if recall * spec > 0 else 0.0
+        ahp = w_ahp[0] * recall + w_ahp[1] * spec
+
+        outer_recalls.append(recall)
+        outer_specs.append(spec)
+        outer_gmeans.append(gmean)
+        outer_ahp.append(ahp)
+        outer_thresholds.append(best_th)
+
+        cm = confusion_matrix(y_test_outer, y_pred)
+        cm_sum += cm
+
+    cm_avg = cm_sum / outer_folds
+    cm_avg_percent = cm_avg / cm_avg.sum() * 100
+
+    results = {
+        "outer_folds": outer_folds,
+        "inner_folds": inner_folds,
+        "thresholds_optimized": [float(t) for t in outer_thresholds],
+        "recall": {"mean": float(np.mean(outer_recalls)), "std": float(np.std(outer_recalls)), "values": outer_recalls},
+        "specificity": {"mean": float(np.mean(outer_specs)), "std": float(np.std(outer_specs)), "values": outer_specs},
+        "gmean": {"mean": float(np.mean(outer_gmeans)), "std": float(np.std(outer_gmeans)), "values": outer_gmeans},
+        "ahp_score": {"mean": float(np.mean(outer_ahp)), "std": float(np.std(outer_ahp)), "values": outer_ahp},
+        "confusion_matrix_avg": cm_avg.tolist(),
+        "confusion_matrix_avg_percent": cm_avg_percent.tolist(),
+    }
+    return results
+
+# ----------------------------------------------------------------------
+# Predicción simple
+# ----------------------------------------------------------------------
+def predict(model, X_scaled: np.ndarray, threshold: float):
     if hasattr(model, "predict_proba"):
         y_prob = model.predict_proba(X_scaled)[:, 1]
     else:
         scores = model.decision_function(X_scaled)
         y_prob = (scores - scores.min()) / (scores.max() - scores.min() + 1e-12)
-
     y_pred = (y_prob >= threshold).astype(int)
     return y_pred, y_prob
 
-
-# ---------------------------------------------------------------------------
-# Metrics
-# ---------------------------------------------------------------------------
-
-def compute_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    y_prob: np.ndarray,
-    weights:  np.ndarray,
-) -> Dict:
-    """Compute detection metrics against ground-truth labels.
-
-    Parameters
-    ----------
-    y_true : np.ndarray
-        Ground-truth binary labels.
-    y_pred : np.ndarray
-        Predicted binary labels.
-    y_prob : np.ndarray
-        Positive-class probabilities.
-
-    Returns
-    -------
-    Dict
-        recall, specificity, ahp_score, confusion_matrix.
-    """
-    recall      = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
+def compute_metrics(y_true, y_pred, y_prob, weights):
+    recall = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
     specificity = recall_score(y_true, y_pred, pos_label=0, zero_division=0)
-    ahp_score   = weights[0] * recall + weights[1] * specificity
-    cm          = confusion_matrix(y_true, y_pred).tolist()
+    ahp = weights[0] * recall + weights[1] * specificity
+    cm = confusion_matrix(y_true, y_pred).tolist()
+    return {"recall": round(recall, 6), "specificity": round(specificity, 6),
+            "ahp_score": round(ahp, 6), "confusion_matrix": cm}
 
-    return {
-        "recall":           round(float(recall),      6),
-        "specificity":      round(float(specificity), 6),
-        "ahp_score":        round(float(ahp_score),   6),
-        "confusion_matrix": cm,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Save helpers
-# ---------------------------------------------------------------------------
-
-def save_predictions_csv(
-    df:        pd.DataFrame,
-    y_pred:    np.ndarray,
-    y_prob:    np.ndarray,
-    out_path:  Path,
-) -> None:
-    """Append prediction and probability columns to the input dataframe
-    and save as CSV.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Original input dataframe.
-    y_pred : np.ndarray
-        Predicted binary labels.
-    y_prob : np.ndarray
-        Positive-class probabilities.
-    out_path : Path
-        Destination CSV path.
-    """
+def save_predictions_csv(df, y_pred, y_prob, out_path):
     out_df = df.copy()
-    out_df["pred_label"]    = y_pred
+    out_df["pred_label"] = y_pred
     out_df["pred_prob_fault"] = np.round(y_prob, 6)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, sep=";", decimal=",", index=False)
-    print(f"[save]  Predictions saved → '{out_path}'")
+    print(f"[save] Predictions saved → '{out_path}'")
 
-
-def save_validation_report(
-    mode:      str,
-    model_id:  str,
-    threshold: float,
-    metrics:   Optional[Dict],
-    n_samples: int,
-    out_path:  Path,
-) -> None:
-    """Save a validation report as JSON.
-
-    Parameters
-    ----------
-    mode : str
-        'sim' or 'lab'.
-    model_id : str
-    threshold : float
-    metrics : Optional[Dict]
-        None if no labels were available.
-    n_samples : int
-    out_path : Path
-    """
-    report = {
-        "mode":      mode,
-        "model_id":  model_id,
-        "threshold": round(threshold, 4),
-        "n_samples": n_samples,
-        "metrics":   metrics,
-    }
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+def save_validation_report(mode, model_id, threshold, metrics, n_samples, out_path):
+    report = {"mode": mode, "model_id": model_id, "threshold": round(threshold, 4),
+              "n_samples": n_samples, "metrics": metrics}
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    print(f"[save]  Validation report saved → '{out_path}'")
+    print(f"[save] Validation report saved → '{out_path}'")
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-def main(config_path: str, mode: str, input_csv: str) -> None:
-    """Run detection inference in simulation or laboratory mode.
-
-    Steps
-    -----
-    1. Load config, best model ID (mcdm_result.json), optimal threshold.
-    2. Load input CSV → features X and optional labels y.
-    3. Apply det_scaler.pkl (transform only).
-    4. Run inference with optimal threshold.
-    5. If labels present → compute metrics.
-    6. Save predictions CSV and validation report JSON.
-
-    Parameters
-    ----------
-    config_path : str
-        Path to config.yaml.
-    mode : str
-        'sim' or 'lab'.
-    input_csv : str
-        Path to input CSV with the 12 electrical features.
-    """
+# ----------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------
+def main(config_path: str, mode: str, input_csv: str, optimize_threshold: bool, nested_cv: bool):
     cfg = load_config(config_path)
-
-    network       = cfg["network"]["name"]
+    network = cfg["network"]["name"]
     processed_dir = Path(cfg["data"]["processed_dir"])
-    det_cfg       = cfg["detection"]
-    models_dir    = Path(det_cfg["models_dir"])
-    results_dir   = Path(det_cfg["results_dir"])
+    det_cfg = cfg["detection"]
+    models_dir = Path(det_cfg["models_dir"])
+    results_dir = Path(det_cfg["results_dir"])
 
-    print(f"\n{'='*60}")
-    print(f"  Detection — predict  [{network}]  mode={mode}")
-    print(f"{'='*60}\n")
-
-    # Load best model and threshold from MCDM + evaluate outputs
+    print(f"\n{'='*60}\n  Detection — predict  [{network}]  mode={mode}\n{'='*60}\n")
     best_model_id, w_ahp = load_best_model_id(results_dir)
-    threshold     = load_threshold(results_dir, best_model_id)
-    model         = load_model(models_dir, best_model_id)
+    model = load_model(models_dir, best_model_id)
 
-    # Load input CSV
-    df, X, y = load_input_csv(input_csv)
+    filter_res = (mode == "lab")
+    df, X, y = load_input_csv(input_csv, filter_resistance=filter_res)
 
-    # Apply scaler (transform only — same scaler as training)
     if mode == "lab":
         scaler = load_scaler(str(processed_dir / "det_scaler.pkl"))
         X_scaled = scaler.transform(X)
+        print(f"[scaler] Applied to {X_scaled.shape[0]} samples")
     else:
         X_scaled = X
-    print(f"[scaler] Applied to {X_scaled.shape[0]:,} samples")
+        print("[sim] Using already scaled features")
 
-    # Inference
+    if optimize_threshold and nested_cv and y is not None:
+        print("\n[threshold] Running NESTED CROSS-VALIDATION for unbiased evaluation...")
+        nested_results = nested_cv_evaluate(model, X, y, scaler, w_ahp,
+                                            outer_folds=5, inner_folds=5,
+                                            n_thresholds=41, random_state=42)
+        out_path = results_dir / "nested_cv_results.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(nested_results, f, indent=2)
+        print(f"\n[nested-cv] Results saved to '{out_path}'")
+        # Métricas
+        print(f"  Recall       = {nested_results['recall']['mean']:.4f} ± {nested_results['recall']['std']:.4f}")
+        print(f"  Specificity  = {nested_results['specificity']['mean']:.4f} ± {nested_results['specificity']['std']:.4f}")
+        print(f"  G-mean       = {nested_results['gmean']['mean']:.4f} ± {nested_results['gmean']['std']:.4f}")
+        print(f"  AHP score    = {nested_results['ahp_score']['mean']:.4f} ± {nested_results['ahp_score']['std']:.4f}")
+        # Umbral
+        th_list = nested_results["thresholds_optimized"]
+        th_mean = np.mean(th_list)
+        th_std = np.std(th_list)
+        print(f"  Threshold    = {th_mean:.4f} ± {th_std:.4f}")
+        print(f"  Thresholds per outer fold: {[f'{t:.2f}' for t in th_list]}")
+        # Matriz de confusión
+        cm_avg = np.array(nested_results["confusion_matrix_avg"])
+        cm_pct = np.array(nested_results["confusion_matrix_avg_percent"])
+        print("\n  Average confusion matrix (counts, over outer folds):")
+        print(f"    TN={cm_avg[0,0]:.1f}  FP={cm_avg[0,1]:.1f}")
+        print(f"    FN={cm_avg[1,0]:.1f}  TP={cm_avg[1,1]:.1f}")
+        print("\n  Average confusion matrix (percentages):")
+        print(f"    TN={cm_pct[0,0]:.1f}%  FP={cm_pct[0,1]:.1f}%")
+        print(f"    FN={cm_pct[1,0]:.1f}%  TP={cm_pct[1,1]:.1f}%")
+        return
+
+    # Caso normal: usar umbral de evaluate.py
+    threshold = load_threshold(results_dir, best_model_id)
     y_pred, y_prob = predict(model, X_scaled, threshold)
-    n_fault    = int(y_pred.sum())
+    n_fault = int(y_pred.sum())
     n_no_fault = len(y_pred) - n_fault
-    print(f"[predict] fault={n_fault}  no-fault={n_no_fault}  "
-          f"(threshold={threshold:.2f})")
+    print(f"[predict] fault={n_fault}  no-fault={n_no_fault} (threshold={threshold:.2f})")
 
-    # Metrics (only if labels available)
     metrics = None
     if y is not None:
         metrics = compute_metrics(y, y_pred, y_prob, w_ahp)
@@ -440,50 +285,28 @@ def main(config_path: str, mode: str, input_csv: str) -> None:
         print(f"  specificity = {metrics['specificity']:.4f}")
         print(f"  ahp_score   = {metrics['ahp_score']:.4f}")
         cm = metrics["confusion_matrix"]
-        print(f"  confusion matrix:")
-        print(f"    TN={cm[0][0]}  FP={cm[0][1]}")
-        print(f"    FN={cm[1][0]}  TP={cm[1][1]}")
+        print(f"  confusion matrix:\n    TN={cm[0][0]}  FP={cm[0][1]}\n    FN={cm[1][0]}  TP={cm[1][1]}")
 
-    # Save outputs
-    input_stem  = Path(input_csv).stem
-    pred_path   = results_dir / f"predictions_{mode}_{input_stem}.csv"
+    input_stem = Path(input_csv).stem
+    pred_path = results_dir / f"predictions_{mode}_{input_stem}.csv"
     report_path = results_dir / f"validation_{mode}_{input_stem}.json"
-
     save_predictions_csv(df, y_pred, y_prob, pred_path)
-    save_validation_report(mode, best_model_id, threshold,
-                           metrics, len(y_pred), report_path)
-
-    print(f"\n[done]  Prediction complete for {network}  (mode={mode}).")
-    print(f"        Results → '{results_dir}'\n")
-
+    save_validation_report(mode, best_model_id, threshold, metrics, len(y_pred), report_path)
+    print(f"\n[done] Prediction complete for {network}  (mode={mode})\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run fault detection inference (simulation or lab mode)."
-    )
-    parser.add_argument(
-        "--config",
-        type     = str,
-        required = True,
-        help     = "Path to config.yaml (e.g. 'ieee13/config.yaml')",
-    )
-    parser.add_argument(
-        "--mode",
-        type     = str,
-        required = True,
-        choices  = ["sim", "lab"],
-        help     = "'sim' for simulation data, 'lab' for laboratory data",
-    )
-    parser.add_argument(
-        "--input",
-        type     = str,
-        required = True,
-        help     = "Path to input CSV with the 12 electrical features",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--mode", required=True, choices=["sim", "lab"])
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--optimize-threshold", action="store_true")
+    parser.add_argument("--nested-cv", action="store_true")
     args = parser.parse_args()
-
+    if args.nested_cv and not args.optimize_threshold:
+        print("[ERROR] --nested-cv requires --optimize-threshold", file=sys.stderr)
+        sys.exit(1)
     try:
-        main(args.config, args.mode, args.input)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"\n[ERROR] {exc}", file=sys.stderr)
+        main(args.config, args.mode, args.input, args.optimize_threshold, args.nested_cv)
+    except Exception as e:
+        print(f"\n[ERROR] {e}", file=sys.stderr)
         sys.exit(1)

@@ -2,8 +2,8 @@
   {
     "model_id": "RF",
     "train_score": 1.0,
-    "cv_score": 0.999893,
-    "gap": 0.000107,
+    "cv_score": 1.0,
+    "gap": 0.0,
     "overfit_flag": false
   },
   {
@@ -15,9 +15,9 @@
   },
   {
     "model_id": "MLP",
-    "train_score": 1.0,
-    "cv_score": 1.0,
-    "gap": 0.0,
+    "train_score": 0.99983,
+    "cv_score": 0.999433,
+    "gap": 0.000397,
     "overfit_flag": false
   }
 ]

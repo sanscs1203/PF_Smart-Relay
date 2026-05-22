@@ -1,175 +1,42 @@
 
-==============================================================
-  Classification — MCDM pipeline  [IEEE 13-Bus]
-==============================================================
+============================================================
+  Classification — predict  [IEEE 13-Bus]  mode=sim
+============================================================
 
-[load]  Decision matrix loaded from 'ieee13/classification/results/decision_matrix.json'
-        Models  : ['RF', 'XGB', 'KNN']
-        Metrics : ['weighted_recall']
-        Shape   : (3, 1)
-[load]  'cls_train.csv'  →  39,782 samples, 12 features
-[load]  'cls_test.csv'  →  8,525 samples, 12 features
-
-──────────────────────────────────────────────────────────────
-  Step 1 — Nominal winner  (weighted recall on test set)
-──────────────────────────────────────────────────────────────
-  RF        weighted_recall = 0.999765
-  XGB       weighted_recall = 0.999883
-  KNN       weighted_recall = 1.000000  ←  nominal winner
-
-──────────────────────────────────────────────────────────────
-  Step 2 — Monte Carlo robustness  (dataset perturbation)
-──────────────────────────────────────────────────────────────
-[load]  Model 'RF' loaded from 'ieee13/classification/models/RF.pkl'
-[load]  Model 'XGB' loaded from 'ieee13/classification/models/XGB.pkl'
+[mcdm] Best model: 'KNN'
 [load]  Model 'KNN' loaded from 'ieee13/classification/models/KNN.pkl'
-[load]  Model 'RF' loaded from 'ieee13/classification/models/RF.pkl'
-[load]  Model 'XGB' loaded from 'ieee13/classification/models/XGB.pkl'
-[load]  Model 'KNN' loaded from 'ieee13/classification/models/KNN.pkl'
+[load] Using 6 feature columns (magnitudes only).
+[load]  'cls_test.csv'  →  976 muestras (fallas), 10 tipos de falla.
+[scaler] Skipped — sim input already scaled
 
-  Running 1,000 simulations (subsample_rate=80%)...
-  [  10/1000] simulations complete
-  [  20/1000] simulations complete
-  [  30/1000] simulations complete
-  [  40/1000] simulations complete
-  [  50/1000] simulations complete
-  [  60/1000] simulations complete
-  [  70/1000] simulations complete
-  [  80/1000] simulations complete
-  [  90/1000] simulations complete
-  [ 100/1000] simulations complete
-  [ 110/1000] simulations complete
-  [ 120/1000] simulations complete
-  [ 130/1000] simulations complete
-  [ 140/1000] simulations complete
-  [ 150/1000] simulations complete
-  [ 160/1000] simulations complete
-  [ 170/1000] simulations complete
-  [ 180/1000] simulations complete
-  [ 190/1000] simulations complete
-  [ 200/1000] simulations complete
-  [ 210/1000] simulations complete
-  [ 220/1000] simulations complete
-  [ 230/1000] simulations complete
-  [ 240/1000] simulations complete
-  [ 250/1000] simulations complete
-  [ 260/1000] simulations complete
-  [ 270/1000] simulations complete
-  [ 280/1000] simulations complete
-  [ 290/1000] simulations complete
-  [ 300/1000] simulations complete
-  [ 310/1000] simulations complete
-  [ 320/1000] simulations complete
-  [ 330/1000] simulations complete
-  [ 340/1000] simulations complete
-  [ 350/1000] simulations complete
-  [ 360/1000] simulations complete
-  [ 370/1000] simulations complete
-  [ 380/1000] simulations complete
-  [ 390/1000] simulations complete
-  [ 400/1000] simulations complete
-  [ 410/1000] simulations complete
-  [ 420/1000] simulations complete
-  [ 430/1000] simulations complete
-  [ 440/1000] simulations complete
-  [ 450/1000] simulations complete
-  [ 460/1000] simulations complete
-  [ 470/1000] simulations complete
-  [ 480/1000] simulations complete
-  [ 490/1000] simulations complete
-  [ 500/1000] simulations complete
-  [ 510/1000] simulations complete
-  [ 520/1000] simulations complete
-  [ 530/1000] simulations complete
-  [ 540/1000] simulations complete
-  [ 550/1000] simulations complete
-  [ 560/1000] simulations complete
-  [ 570/1000] simulations complete
-  [ 580/1000] simulations complete
-  [ 590/1000] simulations complete
-  [ 600/1000] simulations complete
-  [ 610/1000] simulations complete
-  [ 620/1000] simulations complete
-  [ 630/1000] simulations complete
-  [ 640/1000] simulations complete
-  [ 650/1000] simulations complete
-  [ 660/1000] simulations complete
-  [ 670/1000] simulations complete
-  [ 680/1000] simulations complete
-  [ 690/1000] simulations complete
-  [ 700/1000] simulations complete
-  [ 710/1000] simulations complete
-  [ 720/1000] simulations complete
-  [ 730/1000] simulations complete
-  [ 740/1000] simulations complete
-  [ 750/1000] simulations complete
-  [ 760/1000] simulations complete
-  [ 770/1000] simulations complete
-  [ 780/1000] simulations complete
-  [ 790/1000] simulations complete
-  [ 800/1000] simulations complete
-  [ 810/1000] simulations complete
-  [ 820/1000] simulations complete
-  [ 830/1000] simulations complete
-  [ 840/1000] simulations complete
-  [ 850/1000] simulations complete
-  [ 860/1000] simulations complete
-  [ 870/1000] simulations complete
-  [ 880/1000] simulations complete
-  [ 890/1000] simulations complete
-  [ 900/1000] simulations complete
-  [ 910/1000] simulations complete
-  [ 920/1000] simulations complete
-  [ 930/1000] simulations complete
-  [ 940/1000] simulations complete
-  [ 950/1000] simulations complete
-  [ 960/1000] simulations complete
-  [ 970/1000] simulations complete
-  [ 980/1000] simulations complete
-  [ 990/1000] simulations complete
-  [1000/1000] simulations complete
+[predict] 976 samples classified:
+  L A             130  (13.3%)
+  L B             129  (13.2%)
+  L C             163  (16.7%)
+  LL AB            96  (9.8%)
+  LL BC           129  (13.2%)
+  LL CA           113  (11.6%)
+  LLG AB           50  (5.1%)
+  LLG BC           62  (6.4%)
+  LLG CA           58  (5.9%)
+  LLL ABC          46  (4.7%)
 
-==============================================================
-  MONTE CARLO ROBUSTNESS ANALYSIS  (dataset perturbation)
-  Simulations : 1,000   Subsample rate : 80%
-==============================================================
+  Metrics vs ground truth:
+  weighted_recall = 0.9898
 
-  Nominal ranking (full cls_train, no perturbation):
-  --------------------------------------------------
-  #1  KNN         weighted_recall = 1.000000  ████████████████████████████████████████████████████████████
-  #2  XGB         weighted_recall = 0.999883  ███████████████████████████████████████████████████████████
-  #3  RF          weighted_recall = 0.999765  ███████████████████████████████████████████████████████████
+  Per-class recall:
+    L A           0.9922
+    L B           1.0000
+    L C           0.9938
+    LL AB         1.0000
+    LL BC         1.0000
+    LL CA         1.0000
+    LLG AB        0.9796
+    LLG BC        0.9385
+    LLG CA        1.0000
+    LLL ABC       0.9375
+[save] Predictions saved → 'ieee13/classification/results/predictions_sim_cls_test.csv'
+[save] Validation report saved → 'ieee13/classification/results/validation_sim_cls_test.json'
 
-  Win rate per model (1,000 simulations):
-  --------------------------------------------------
-  KNN          79.90%  ███████████████████████████████████████
-  XGB          12.00%  ██████
-  RF            8.10%  ████
-
-  Score statistics (mean ± std):
-  --------------------------------------------------
-  KNN         0.999968 ± 0.000070
-  XGB         0.999825 ± 0.000098
-  RF          0.999728 ± 0.000119
-
-  Stability index : 0.8220  (82.2% of simulations)
-  Verdict         : ✅  ROBUST   — ranking stable under data variation
-
-
-──────────────────────────────────────────────────────────────
-  Step 3 — Best model selection  (win rate)
-──────────────────────────────────────────────────────────────
-  ✅  Nominal winner 'KNN' confirmed by win rate (79.9%).
-
-==============================================================
-  Best model       : KNN
-  Selection reason : nominal winner confirmed by Monte Carlo (win rate=79.9%)
-  Stability        : 0.8220  (ROBUST)
-  Win rate         : 79.9%
-==============================================================
-
-[save]  MCDM result saved → 'ieee13/classification/results/mcdm_result.json'
-
-[done]  MCDM pipeline complete for IEEE 13-Bus.
-        Results → 'ieee13/classification/results'
+[done] Prediction complete for IEEE 13-Bus.
 

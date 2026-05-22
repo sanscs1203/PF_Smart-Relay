@@ -1,23 +1,23 @@
 [
   {
     "model_id": "RF",
-    "train_score": 1.0,
-    "cv_score": 0.999975,
-    "gap": 2.5e-05,
+    "train_score": 0.999354,
+    "cv_score": 0.965747,
+    "gap": 0.033607,
     "overfit_flag": false
   },
   {
     "model_id": "XGB",
     "train_score": 1.0,
-    "cv_score": 0.999749,
-    "gap": 0.000251,
+    "cv_score": 0.970487,
+    "gap": 0.029513,
     "overfit_flag": false
   },
   {
     "model_id": "KNN",
-    "train_score": 1.0,
-    "cv_score": 0.999925,
-    "gap": 7.5e-05,
+    "train_score": 0.997415,
+    "cv_score": 0.978243,
+    "gap": 0.019172,
     "overfit_flag": false
   }
 ]

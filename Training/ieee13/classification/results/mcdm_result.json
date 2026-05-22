@@ -12,28 +12,28 @@
       "RF"
     ],
     "nominal_scores": [
-      0.999765,
-      0.999883,
-      1.0
+      0.974385,
+      0.983607,
+      0.989754
     ],
     "win_rates": {
-      "RF": 8.1,
-      "XGB": 12.0,
-      "KNN": 79.9
+      "RF": 0.0,
+      "XGB": 0.0,
+      "KNN": 100.0
     },
     "score_mean": {
-      "RF": 0.999728,
-      "XGB": 0.999825,
-      "KNN": 0.999968
+      "RF": 0.972264,
+      "XGB": 0.978023,
+      "KNN": 0.987859
     },
     "score_std": {
-      "RF": 0.000119,
-      "XGB": 9.8e-05,
-      "KNN": 7e-05
+      "RF": 0.003023,
+      "XGB": 0.002293,
+      "KNN": 0.00155
     },
-    "stability_index": 0.822,
+    "stability_index": 0.99,
     "verdict": "ROBUST"
   },
-  "selection_reason": "nominal winner confirmed by Monte Carlo (win rate=79.9%)",
+  "selection_reason": "nominal winner confirmed by Monte Carlo (win rate=100.0%)",
   "best_model": "KNN"
 }

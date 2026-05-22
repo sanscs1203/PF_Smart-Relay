@@ -2,7 +2,7 @@
   "mode": "sim",
   "model_id": "SVM",
   "threshold": 0.1,
-  "n_samples": 10025,
+  "n_samples": 4876,
   "metrics": {
     "recall": 1.0,
     "specificity": 1.0,
@@ -14,7 +14,7 @@
       ],
       [
         0,
-        8525
+        3376
       ]
     ]
   }
